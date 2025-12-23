@@ -256,6 +256,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   const [isPanning, setIsPanning] = useState(false);
   const panStartPos = useRef<Position>({ x: 0, y: 0 });
   const panStartOffset = useRef<Position>({ x: 0, y: 0 });
+  const [isMousePanning, setIsMousePanning] = useState(false);
 
   // Maintain ball distance when zoom changes
   useEffect(() => {
@@ -452,8 +453,61 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     };
   });
 
+  // Mouse event handlers for desktop panning
+  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    // Only pan with left mouse button
+    if (e.button !== 0) return;
+
+    // Don't start panning if we're clicking to place pin/ball
+    if (isAdjustingPin || !ballPosition || holeComplete) return;
+
+    setIsMousePanning(true);
+    panStartPos.current = {
+      x: e.clientX,
+      y: e.clientY
+    };
+    panStartOffset.current = { ...viewBoxOffset };
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isMousePanning) return;
+
+    const svg = greenRef.current;
+    if (!svg) return;
+
+    const deltaX = e.clientX - panStartPos.current.x;
+    const deltaY = e.clientY - panStartPos.current.y;
+
+    const rect = svg.getBoundingClientRect();
+    // Convert pixel movement to viewBox units
+    const viewBoxDeltaX = -(deltaX / rect.width) * 100;
+    const viewBoxDeltaY = -(deltaY / rect.height) * 100;
+
+    setViewBoxOffset({
+      x: panStartOffset.current.x + viewBoxDeltaX,
+      y: panStartOffset.current.y + viewBoxDeltaY
+    });
+
+    e.preventDefault();
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (isMousePanning) {
+      setIsMousePanning(false);
+      e.preventDefault();
+      e.stopPropagation(); // Prevent click event from firing
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (isMousePanning) {
+      setIsMousePanning(false);
+    }
+  };
+
   const handleGreenClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!greenRef.current || isPinching || isPanning) return;
+    if (!greenRef.current || isPinching || isPanning || isMousePanning) return;
 
     // Disable green interaction when hole is complete
     if (holeComplete) return;
@@ -1380,7 +1434,11 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             className="green-svg-compact"
             viewBox={`${viewBoxOffset.x} ${viewBoxOffset.y} 100 100`}
             onClick={handleGreenClick}
-            style={{ cursor: holeComplete ? 'not-allowed' : (isAdjustingPin ? 'crosshair' : 'pointer') }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            style={{ cursor: holeComplete ? 'not-allowed' : (isAdjustingPin ? 'crosshair' : (isMousePanning ? 'grabbing' : 'pointer')) }}
           >
             {/* Grid pattern - infinite static background */}
             <defs>

@@ -2398,7 +2398,7 @@ button{
   background: #0a0a0a;
   overflow: hidden;
   max-width: 600px;
-  margin: 0 auto;
+  /* margin: 0 auto; */
   box-sizing: border-box;
 }
 
