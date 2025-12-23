@@ -284,7 +284,8 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           <div className="stats-card-value">
             {calculateAvgMakeDistance(putts).toFixed(1)}m
           </div>
-          {/* <div className="stats-card-badge">Avg</div> */}
+          {/* 
+          <div className="stats-card-badge">Avg</div> */}
         </div>
       </div>
     </div>
