@@ -1714,11 +1714,18 @@ button{
   position: absolute;
   top: var(--spacing-sm);
   right: var(--spacing-sm);
-  display: flex;
+  display: none; /* Hidden on mobile by default */
   flex-direction: column;
   gap: var(--spacing-xs);
   z-index: 10;
   pointer-events: all;
+}
+
+/* Show zoom controls on larger screens (desktop/tablet) */
+@media (min-width: 768px) {
+  .canvas-zoom-controls-overlay {
+    display: flex;
+  }
 }
 
 .zoom-control-btn {
