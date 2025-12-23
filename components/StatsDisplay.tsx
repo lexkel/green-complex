@@ -108,9 +108,12 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const makeProbability = distanceRanges.map(range => {
     const puttsInRange = putts.filter(p => p.distance >= range.min && p.distance < range.max);
     const made = puttsInRange.filter(p => p.made).length;
+    const total = puttsInRange.length;
     return {
       label: range.label,
-      percentage: puttsInRange.length > 0 ? (made / puttsInRange.length) * 100 : 0,
+      percentage: total > 0 ? (made / total) * 100 : 0,
+      made,
+      total,
     };
   });
 
@@ -197,7 +200,9 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
                   style={{ width: `${item.percentage}%` }}
                 ></div>
               </div>
-              <div className="make-probability-percentage">{item.percentage.toFixed(0)}%</div>
+              <div className="make-probability-percentage">
+                {item.percentage.toFixed(0)}% {item.total > 0 && `(${item.made}/${item.total})`}
+              </div>
             </div>
           ))}
         </div>

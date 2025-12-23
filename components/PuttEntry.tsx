@@ -1137,9 +1137,10 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   // Render green shape based on type
   const renderGreenShape = (shape: GreenShape, zoom: number) => {
     // Calculate transform string with optional offset
+    // Scale from center (50,50) to keep pin positions relative to green
     const offsetX = shape.offsetX || 0;
     const offsetY = shape.offsetY || 0;
-    const transform = `translate(${offsetX}, ${offsetY}) scale(${1/zoom})`;
+    const transform = `translate(${50 + offsetX}, ${50 + offsetY}) scale(${1/zoom}) translate(${-50}, ${-50})`;
 
     if (shape.type === 'svg' && shape.svgPath) {
       return (
@@ -1154,7 +1155,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             />
           ) : (
             // Auto-generate fringe using SVG stroke for uniform width
-            <g transform={`translate(${offsetX}, ${offsetY}) scale(${1/zoom})`}>
+            <g transform={transform}>
               <path
                 d={shape.svgPath}
                 fill="#145d3d"
@@ -1356,6 +1357,24 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             ) : null}
           </div>
 
+          {/* Desktop Zoom Controls - positioned top-right */}
+          <div className="canvas-zoom-controls-overlay">
+            <button
+              className="zoom-control-btn"
+              onClick={() => setCanvasZoom(Math.min(4, canvasZoom + 0.2))}
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+            <button
+              className="zoom-control-btn"
+              onClick={() => setCanvasZoom(Math.max(0.5, canvasZoom - 0.2))}
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+          </div>
+
           <svg
             ref={greenRef}
             className="green-svg-compact"
@@ -1375,8 +1394,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             {/* Green shape - rendered based on course data */}
             {greenShapeData && renderGreenShape(greenShapeData, canvasZoom)}
 
-            {/* BACK label */}
-            <text x="50" y="8" textAnchor="middle" fill="#6b7280" fontSize="3" fontWeight="600">BACK</text>
+            {/* BACK label - fixed position relative to viewport */}
+            <text x={viewBoxOffset.x + 50} y={viewBoxOffset.y + 8} textAnchor="middle" fill="#6b7280" fontSize="3" fontWeight="600">BACK</text>
 
             {/* Putt Chain Visualization */}
             {puttHistory.length > 0 && (

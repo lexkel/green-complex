@@ -1019,6 +1019,8 @@ button{
   flex-direction: column;
   height: calc(100vh - 80px);
   overflow: hidden;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .compact-header {
@@ -1707,6 +1709,45 @@ button{
   pointer-events: all;
 }
 
+/* Zoom controls overlay - top right of canvas for desktop */
+.canvas-zoom-controls-overlay {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  z-index: 10;
+  pointer-events: all;
+}
+
+.zoom-control-btn {
+  background: rgba(26, 26, 26, 0.85);
+  color: white;
+  border: 1.5px solid rgba(107, 114, 128, 0.4);
+  border-radius: var(--radius);
+  width: 40px;
+  height: 40px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-control-btn:hover {
+  background: rgba(42, 42, 42, 0.9);
+  border-color: rgba(107, 114, 128, 0.6);
+  transform: scale(1.05);
+}
+
+.zoom-control-btn:active {
+  transform: scale(0.95);
+}
+
 .canvas-adjust-controls-overlay {
   position: absolute;
   bottom: var(--spacing-xs);
@@ -1856,7 +1897,7 @@ button{
 /* Home Screen Styles */
 .home-container {
   max-width: 600px;
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
   padding-bottom: 100px;
   min-height: 100vh;
