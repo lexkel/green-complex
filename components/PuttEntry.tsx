@@ -992,7 +992,13 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     // Collect all pending putts from all holes
     const allPendingPutts = [...pendingPutts];
 
-    // Notify parent that round is complete (before clearing data)
+    // Save round to local history (last 10 rounds) BEFORE notifying parent
+    if (allPendingPutts.length > 0) {
+      const activeRoundForHistory = ActiveRoundStorage.loadActiveRound();
+      RoundHistory.saveRound(allPendingPutts, activeRoundForHistory?.courseName || NEANGAR_PARK.name);
+    }
+
+    // Notify parent that round is complete (after saving to history)
     if (onRoundComplete) {
       const activeRound = ActiveRoundStorage.loadActiveRound();
       onRoundComplete({
@@ -1000,12 +1006,6 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         courseName: activeRound?.courseName || NEANGAR_PARK.name,
         startTimestamp: activeRound?.startTimestamp || new Date().toISOString()
       });
-    }
-
-    // Save round to local history (last 10 rounds)
-    if (allPendingPutts.length > 0) {
-      const activeRoundForHistory = ActiveRoundStorage.loadActiveRound();
-      RoundHistory.saveRound(allPendingPutts, activeRoundForHistory?.courseName || NEANGAR_PARK.name);
     }
 
     // Save all putts to Google Sheets
