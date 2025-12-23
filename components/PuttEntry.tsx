@@ -1361,14 +1361,14 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
           <div className="canvas-zoom-controls-overlay">
             <button
               className="zoom-control-btn"
-              onClick={() => setCanvasZoom(Math.min(4, canvasZoom + 0.2))}
+              onClick={() => setCanvasZoom(Math.max(0.5, canvasZoom - 0.2))}
               aria-label="Zoom in"
             >
               +
             </button>
             <button
               className="zoom-control-btn"
-              onClick={() => setCanvasZoom(Math.max(0.5, canvasZoom - 0.2))}
+              onClick={() => setCanvasZoom(Math.min(4, canvasZoom + 0.2))}
               aria-label="Zoom out"
             >
               −
