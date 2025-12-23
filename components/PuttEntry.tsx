@@ -257,6 +257,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   const panStartPos = useRef<Position>({ x: 0, y: 0 });
   const panStartOffset = useRef<Position>({ x: 0, y: 0 });
   const [isMousePanning, setIsMousePanning] = useState(false);
+  const hasMousePanned = useRef<boolean>(false);
 
   // Maintain ball distance when zoom changes
   useEffect(() => {
@@ -462,6 +463,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     if (isAdjustingPin || !ballPosition || holeComplete) return;
 
     setIsMousePanning(true);
+    hasMousePanned.current = false; // Reset the flag
     panStartPos.current = {
       x: e.clientX,
       y: e.clientY
@@ -478,6 +480,12 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
     const deltaX = e.clientX - panStartPos.current.x;
     const deltaY = e.clientY - panStartPos.current.y;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    // If moved more than 5 pixels, mark as panned
+    if (distance > 5) {
+      hasMousePanned.current = true;
+    }
 
     const rect = svg.getBoundingClientRect();
     // Convert pixel movement to viewBox units
@@ -496,17 +504,26 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     if (isMousePanning) {
       setIsMousePanning(false);
       e.preventDefault();
-      e.stopPropagation(); // Prevent click event from firing
+      if (hasMousePanned.current) {
+        e.stopPropagation(); // Prevent click event from firing only if user actually panned
+      }
     }
   };
 
   const handleMouseLeave = () => {
     if (isMousePanning) {
       setIsMousePanning(false);
+      hasMousePanned.current = false;
     }
   };
 
   const handleGreenClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    // Don't handle click if user just finished panning
+    if (hasMousePanned.current) {
+      hasMousePanned.current = false;
+      return;
+    }
+
     if (!greenRef.current || isPinching || isPanning || isMousePanning) return;
 
     // Disable green interaction when hole is complete

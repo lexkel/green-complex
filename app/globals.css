@@ -2746,6 +2746,8 @@ button{
   background: #0a0a0a;
   border-top: 1px solid #1a1a1a;
   z-index: 10;
+  max-width: 600px;
+  margin: auto;
 }
 
 .round-summary-done-button {
