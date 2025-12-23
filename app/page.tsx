@@ -975,23 +975,16 @@ export default function Home() {
   return (
     <div className="app-container">
       {activeTab === 'home' ? (
-        <div className="home-container">
+        <div className="home-view">
           {/* Header */}
           <div className="home-header">
-            <div className="home-header-left">
-              <button className="back-button" onClick={() => setShowSplashScreen(true)} style={{ marginRight: '12px' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <div className="home-title-info">
-                <h1 className="home-app-title">Home</h1>
-                {/* <span className="home-subtitle">Neangar Park Golf Club</span> */}
-              </div>
-            </div>
-            {/* <button className="home-settings-button" onClick={() => setActiveTab('settings')}>
-              Settings
-            </button> */}
+            <button className="back-button" onClick={() => setShowSplashScreen(true)} style={{ marginRight: '12px' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+              <h1 className="home-app-title">Home</h1>
+              <div style={{ width: '40px' }}></div>
           </div>
 
           <div className="home-content-wrapper">
