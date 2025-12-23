@@ -1358,7 +1358,7 @@ export default function Home() {
             <div style={{ width: '40px' }}></div>
           </div>
 
-          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="settings-content">
             {/* User Profile Card */}
             <div style={{
               display: 'flex',

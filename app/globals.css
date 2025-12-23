@@ -962,6 +962,22 @@ button{
   min-height: calc(100vh - 80px);
 }
 
+/* Settings View */
+
+.settings-view {
+  flex: 1;
+  background: var(--color-bg);
+  min-height: calc(100vh - 80px);
+}
+
+.settings-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  box-sizing: border-box;
+}
+
 .stats-header {
   display: flex;
   align-items: center;
@@ -1910,6 +1926,7 @@ button{
   padding: 0;
   padding-bottom: 100px;
   min-height: 100vh;
+  box-sizing: border-box;
 }
 
 .home-header {
@@ -1973,7 +1990,7 @@ button{
 }
 
 .home-content-wrapper {
-  padding: var(--spacing-lg);
+  padding: 1.5rem;
 }
 
 .home-section-header {
@@ -2380,12 +2397,16 @@ button{
   height: 100vh;
   background: #0a0a0a;
   overflow: hidden;
+  max-width: 600px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .round-summary-content {
   flex: 1;
   overflow-y: auto;
   padding: 1.5rem 1.5rem 5rem;
+  box-sizing: border-box;
 }
 
 .round-summary-header {
@@ -2865,12 +2886,13 @@ button{
 }
 /* Modern Stats Display Styles */
 .stats-display-modern {
-  padding: 1rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   max-width: 600px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* Summary Cards */
