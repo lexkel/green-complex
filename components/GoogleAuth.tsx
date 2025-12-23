@@ -3,7 +3,6 @@
 // Google Auth imports - keeping for future use
 // import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { config } from '@/config';
 
 interface AuthContextType {
   accessToken: string | null;
@@ -24,9 +23,29 @@ export function useAuth() {
   return context;
 }
 
+// Parse users from environment variable
+// Format: "username1:passcode1,username2:passcode2"
+function parseUsersFromEnv(): Array<{ username: string; passcode: string }> {
+  const usersEnv = process.env.NEXT_PUBLIC_AUTH_USERS;
+  if (!usersEnv) {
+    console.warn('[AUTH] NEXT_PUBLIC_AUTH_USERS not set, using empty user list');
+    return [];
+  }
+
+  try {
+    return usersEnv.split(',').map(pair => {
+      const [username, passcode] = pair.trim().split(':');
+      return { username: username.trim(), passcode: passcode.trim() };
+    });
+  } catch (error) {
+    console.error('[AUTH] Failed to parse NEXT_PUBLIC_AUTH_USERS:', error);
+    return [];
+  }
+}
+
 // Simple passcode-based auth provider
 function SimpleAuthProvider({ children }: { children: ReactNode }) {
-  const USERS = config?.auth?.users || [];
+  const USERS = parseUsersFromEnv();
 
   // Initialize auth state from localStorage
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
