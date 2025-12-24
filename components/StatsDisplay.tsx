@@ -21,7 +21,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const [rounds, setRounds] = useState<SavedRound[]>([]);
 
   useEffect(() => {
-    setRounds(RoundHistory.getRounds());
+    RoundHistory.getRounds().then(setRounds);
   }, [putts]);
 
   if (putts.length === 0) {

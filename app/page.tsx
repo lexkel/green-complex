@@ -12,6 +12,8 @@ import { ActiveRoundStorage } from '@/lib/activeRound';
 import { PuttingAttempt } from '@/types';
 import { Save, Trash2 } from 'lucide-react';
 import { COURSES, CourseData, HoleData } from '@/data/courses';
+import { UserIdentity } from '@/lib/userIdentity';
+import { DataMigration } from '@/lib/migration';
 
 // Sample data for demo mode
 const DEMO_PUTTS: PuttingAttempt[] = [
@@ -62,6 +64,27 @@ export default function Home() {
   const [courseEditMode, setCourseEditMode] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('neangar-park');
   const hasInitializedRef = useRef(false);
+  const migrationCompleteRef = useRef(false);
+
+  // Initialize user identity and run migration
+  useEffect(() => {
+    const initUserAndMigrate = async () => {
+      // Initialize user identity
+      const { id, isNew } = UserIdentity.getUserId();
+      console.log('[App] User ID:', id, 'Is new:', isNew);
+
+      // Run migration from localStorage to IndexedDB
+      try {
+        await DataMigration.migrateFromLocalStorage();
+        migrationCompleteRef.current = true;
+        console.log('[App] Data migration complete');
+      } catch (error) {
+        console.error('[App] Migration failed:', error);
+      }
+    };
+
+    initUserAndMigrate();
+  }, []);
 
   useEffect(() => {
     setIsOnline(OfflineStorage.isOnline());
@@ -87,35 +110,40 @@ export default function Home() {
       console.log('[PAGE] Initializing app data');
       hasInitializedRef.current = true;
 
-      if (isDemoMode) {
-        // Load demo data
-        setPutts(DEMO_PUTTS);
-        setIsLoading(false);
-      } else if (accessToken === 'simple-auth-token') {
-        // Load putts from localStorage rounds for simple auth
-        const rounds = RoundHistory.getRounds();
-        const allPutts = rounds.flatMap(round => round.putts);
-        setPutts(allPutts);
-        setIsLoading(false);
-      } else {
-        loadPutts();
-      }
-      // Load recent rounds from localStorage
-      setRecentRounds(RoundHistory.getRounds());
+      const initializeData = async () => {
+        if (isDemoMode) {
+          // Load demo data
+          setPutts(DEMO_PUTTS);
+          setIsLoading(false);
+        } else if (accessToken === 'simple-auth-token') {
+          // Load putts from IndexedDB rounds for simple auth
+          const rounds = await RoundHistory.getRounds();
+          const allPutts = rounds.flatMap(round => round.putts);
+          setPutts(allPutts);
+          setIsLoading(false);
+        } else {
+          loadPutts();
+        }
+        // Load recent rounds from IndexedDB
+        const rounds = await RoundHistory.getRounds();
+        setRecentRounds(rounds);
 
-      // Load active round summary for home screen display
-      const activeRound = ActiveRoundStorage.getActiveRoundSummary();
-      if (activeRound) {
-        setPendingPuttsCount(activeRound.totalPutts);
-        setHolesComplete(activeRound.holesPlayed);
-        setActiveRoundInfo({ courseName: activeRound.courseName, startTime: activeRound.startTime });
-      }
+        // Load active round summary for home screen display
+        const activeRound = ActiveRoundStorage.getActiveRoundSummary();
+        if (activeRound) {
+          setPendingPuttsCount(activeRound.totalPutts);
+          setHolesComplete(activeRound.holesPlayed);
+          setActiveRoundInfo({ courseName: activeRound.courseName, startTime: activeRound.startTime });
+        }
 
-      // Load custom courses from localStorage
-      const savedCustomCourses = localStorage.getItem('customCourses');
-      if (savedCustomCourses) {
-        setCustomCourses(JSON.parse(savedCustomCourses));
-      }
+        // Load custom courses from localStorage
+        const savedCustomCourses = localStorage.getItem('customCourses');
+        if (savedCustomCourses) {
+          setCustomCourses(JSON.parse(savedCustomCourses));
+        }
+      };
+
+      initializeData();
     }
   }, [isAuthenticated, accessToken, isDemoMode]);
 
@@ -334,7 +362,7 @@ export default function Home() {
       setSaveRoundFn(null);
       setGetRoundDataFn(null);
       // Reload recent rounds after saving
-      setRecentRounds(RoundHistory.getRounds());
+      RoundHistory.getRounds().then(setRecentRounds);
 
       // Show the round summary
       console.log('[HANDLE END ROUND] Setting showRoundSummary to true');
@@ -358,7 +386,7 @@ export default function Home() {
     setGetRoundDataFn(null);
 
     // Reload recent rounds after saving
-    setRecentRounds(RoundHistory.getRounds());
+    RoundHistory.getRounds().then(setRecentRounds);
 
     // Show the round summary
     console.log('[HANDLE ROUND COMPLETE] Setting showRoundSummary to true');
@@ -376,28 +404,28 @@ export default function Home() {
     setShowRoundSummary(true);
   };
 
-  const handleDeleteRound = (roundId: string, e: React.MouseEvent) => {
+  const handleDeleteRound = async (roundId: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
     if (window.confirm('Are you sure you want to delete this round? This action cannot be undone.')) {
-      RoundHistory.deleteRound(roundId);
-      setRecentRounds(RoundHistory.getRounds());
+      await RoundHistory.deleteRound(roundId);
+      const rounds = await RoundHistory.getRounds();
+      setRecentRounds(rounds);
       setOpenMenuRoundId(null);
 
       // Refresh stats by reloading putts from round history
       if (accessToken === 'simple-auth-token' || isDemoMode) {
-        const rounds = RoundHistory.getRounds();
         const allPutts = rounds.flatMap(round => round.putts);
         setPutts(allPutts);
       }
     }
   };
 
-  const handleEditRoundMetadata = (courseName: string, date: Date) => {
+  const handleEditRoundMetadata = async (courseName: string, date: Date) => {
     if (!savedRoundData?.roundId) return;
 
     // Update the round in history
-    RoundHistory.updateRound(savedRoundData.roundId, {
+    await RoundHistory.updateRound(savedRoundData.roundId, {
       course: courseName,
       timestamp: date.toISOString()
     });
@@ -410,7 +438,8 @@ export default function Home() {
     });
 
     // Reload recent rounds to reflect changes
-    setRecentRounds(RoundHistory.getRounds());
+    const rounds = await RoundHistory.getRounds();
+    setRecentRounds(rounds);
   };
 
   const restoreRoundForEditing = (putts: PuttingAttempt[], courseName: string, startTimestamp: string, targetHole?: number) => {
@@ -608,31 +637,15 @@ export default function Home() {
     setShowRoundSummary(true);
   };
 
-  const saveEditedRoundAndExit = () => {
+  const saveEditedRoundAndExit = async () => {
     if (!getRoundDataFn || !savedRoundData || !savedRoundData.roundId) return;
 
     // Get current round data
     const currentData = getRoundDataFn();
 
-    // Update the saved round in history
-    const rounds = RoundHistory.getRounds();
-    const updatedRounds = rounds.map(round => {
-      if (round.id === savedRoundData.roundId) {
-        const holesPlayed = new Set(currentData.putts.map(p => p.holeNumber).filter(h => h !== undefined)).size;
-        return {
-          ...round,
-          putts: currentData.putts,
-          holesPlayed: holesPlayed,
-          totalPutts: currentData.putts.length,
-        };
-      }
-      return round;
-    });
-
-    // Save back to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('round_history', JSON.stringify(updatedRounds));
-    }
+    // Delete the old round and save the updated one
+    await RoundHistory.deleteRound(savedRoundData.roundId);
+    await RoundHistory.saveRound(currentData.putts, savedRoundData.courseName);
 
     // Update savedRoundData with new putts
     setSavedRoundData({
@@ -641,7 +654,8 @@ export default function Home() {
     });
 
     // Reload recent rounds
-    setRecentRounds(RoundHistory.getRounds());
+    const rounds = await RoundHistory.getRounds();
+    setRecentRounds(rounds);
 
     // Clear active round and editing state
     ActiveRoundStorage.clearActiveRound();
