@@ -198,6 +198,11 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         setGreenShape(currentHoleState.greenShape);
         setCanvasZoom(currentHoleState.canvasZoom);
         setViewBoxOffset(currentHoleState.viewBoxOffset);
+
+        // If there are putts in history, pin has already been placed
+        if (currentHoleState.puttHistory.length > 0) {
+          setIsAdjustingPin(false);
+        }
       } else {
         console.log('[RESTORE] No hole state found for hole', savedRound.currentHole);
       }
@@ -1053,6 +1058,11 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       setGreenShape(savedState.greenShape);
       setCanvasZoom(savedState.canvasZoom);
       setViewBoxOffset(savedState.viewBoxOffset);
+
+      // If there are putts in history, pin has already been placed
+      if (savedState.puttHistory.length > 0) {
+        setIsAdjustingPin(false);
+      }
       // Don't restore pendingPutts - they're accumulated across all holes
     } else {
       // No saved state, reset to defaults
@@ -1491,41 +1501,30 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                           y1={startPos.y}
                           x2={endPos.x}
                           y2={endPos.y}
-                          stroke={putt.made ? "#22c55e" : "gray"}
+                          stroke="white"
                           strokeWidth="0.6"
                           strokeLinecap="round"
                           opacity="0.8"
                         />
                       )}
-                      {/* Start position marker (small circle) */}
+                      {/* Start position marker (small dot) */}
                       <circle
                         cx={startPos.x}
                         cy={startPos.y}
-                        r="1.4"
-                        fill={idx === 0 ? "gray" : "#3b82f6"}
+                        r="0.6"
+                        fill="white"
                         opacity="0.9"
                       />
                       {/* End position marker - only for complete putts */}
                       {!isPartial && (
-                        putt.made ? (
-                          // Holed - show at pin position
-                          <circle
-                            cx={pinPosition.x}
-                            cy={pinPosition.y}
-                            r="0.8"
-                            fill="#22c55e"
-                            opacity="0.9"
-                          />
-                        ) : (
-                          // Missed - show end position
-                          <circle
-                            cx={endPos.x}
-                            cy={endPos.y}
-                            r="0.6"
-                            fill="#3b82f6"
-                            opacity="0.9"
-                          />
-                        )
+                        // Show small white dot at end position (including holed putts)
+                        <circle
+                          cx={putt.made ? pinPosition.x : endPos.x}
+                          cy={putt.made ? pinPosition.y : endPos.y}
+                          r="0.6"
+                          fill="white"
+                          opacity="0.9"
+                        />
                       )}
                     </g>
                   );
@@ -1535,19 +1534,24 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
             {/* Pin with Lucide flag icon - scales with zoom - only show after pin is placed */}
             {!isAdjustingPin && (
-              <g transform={`translate(${pinPosition.x}, ${pinPosition.y}) scale(${1 / canvasZoom})`}>
-                {/* Hole */}
-                <circle cx="0" cy="0" r="2.4" fill="#141414" stroke="#6b7280" strokeWidth="0.3"/>
-                {/* Flag - simplified icon-style */}
-                <g transform="translate(-3, -10) scale(0.4)">
-                  <path d="M8 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M8 22v-7" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/>
+              <>
+                {/* Hole - custom scaling: larger when zoomed out, smaller when zoomed in */}
+                <g transform={`translate(${pinPosition.x}, ${pinPosition.y}) scale(${Math.pow(1 / canvasZoom, 0.5) * 0.7})`}>
+                  <circle cx="0" cy="0" r="2.4" fill="#141414" stroke="#6b7280" strokeWidth="0.3"/>
                 </g>
-              </g>
+
+                {/* Flag - maintains current inverse scaling for visibility */}
+                <g transform={`translate(${pinPosition.x}, ${pinPosition.y}) scale(${1 / canvasZoom})`}>
+                  <g transform="translate(-3, -10) scale(0.4)">
+                    <path d="M8 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M8 22v-7" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/>
+                  </g>
+                </g>
+              </>
             )}
 
-            {/* Ball - only show when positioned */}
-            {ballPosition && (
+            {/* Ball - only show when positioned and hole not complete */}
+            {ballPosition && !holeComplete && (
               <>
                 <circle
                   cx={ballPosition.x}
@@ -1558,16 +1562,17 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                   strokeWidth="0.2"
                 />
 
-                {/* Distance line */}
+                {/* Distance line - dashed white line for active putt */}
                 <line
                   x1={pinPosition.x}
                   y1={pinPosition.y}
                   x2={ballPosition.x}
                   y2={ballPosition.y}
-                  stroke="#9ca3af"
-                  strokeWidth="0.3"
-                  strokeDasharray="1,1"
-                  opacity="0.5"
+                  stroke="white"
+                  strokeWidth="0.6"
+                  strokeDasharray="2,2"
+                  strokeLinecap="round"
+                  opacity="0.8"
                 />
               </>
             )}
