@@ -383,6 +383,13 @@ export default function Home() {
       RoundHistory.deleteRound(roundId);
       setRecentRounds(RoundHistory.getRounds());
       setOpenMenuRoundId(null);
+
+      // Refresh stats by reloading putts from round history
+      if (accessToken === 'simple-auth-token' || isDemoMode) {
+        const rounds = RoundHistory.getRounds();
+        const allPutts = rounds.flatMap(round => round.putts);
+        setPutts(allPutts);
+      }
     }
   };
 
@@ -457,14 +464,26 @@ export default function Home() {
       const defaultViewBoxOffset = { x: 0, y: 0 };
 
       // Build putt history from the saved putts
-      const puttHistory = holePutts.map((putt, idx) => ({
-        puttNum: putt.puttNumber || (idx + 1),
-        distance: putt.distance,
-        startProximity: putt.startProximity || null,
-        endProximity: putt.proximity || null,
-        endDistance: putt.distance, // This would be recalculated in actual play
-        made: putt.made,
-      }));
+      // IMPORTANT: Reconstruct startProximity from previous putt's endProximity
+      const puttHistory = holePutts.map((putt, idx) => {
+        // Calculate endDistance from endProximity (distance from pin to where ball stopped)
+        let endDistance = 0;
+        if (putt.proximity) {
+          endDistance = Math.sqrt(
+            putt.proximity.horizontal * putt.proximity.horizontal +
+            putt.proximity.vertical * putt.proximity.vertical
+          );
+        }
+
+        return {
+          puttNum: putt.puttNumber || (idx + 1),
+          distance: putt.distance,
+          startProximity: idx === 0 ? (putt.startProximity || null) : (holePutts[idx - 1].proximity || null),
+          endProximity: putt.proximity || null,
+          endDistance: endDistance,
+          made: putt.made,
+        };
+      });
 
       // Determine ball position from last putt
       const lastPutt = holePutts[holePutts.length - 1];

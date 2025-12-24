@@ -1683,11 +1683,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             </div>
           ) : (
             puttHistory.map((putt, idx) => {
-              // For the first putt, calculate start descriptor
-              // For subsequent putts, use the previous putt's end descriptor
-              const startDescriptor = idx === 0
-                ? formatProximitySimple(putt.startProximity, putt.distance)
-                : formatMissDirection(puttHistory[idx - 1].startProximity, puttHistory[idx - 1].endProximity, puttHistory[idx - 1].endDistance);
+              // Calculate the start descriptor for this putt
+              const startDescriptor = formatProximitySimple(putt.startProximity, putt.distance);
 
               return (
                 <div key={idx} className="putt-history-item">
