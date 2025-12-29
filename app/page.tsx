@@ -351,34 +351,57 @@ export default function Home() {
     setGetRoundDataFn(() => getRoundDataFn);
   }, []);
 
-  const handleEndRound = () => {
+  const handleEndRound = async () => {
     console.log('[HANDLE END ROUND] Called, saveRoundFn:', saveRoundFn, 'getRoundDataFn:', getRoundDataFn);
     if (saveRoundFn && getRoundDataFn) {
       // Get the active round data before saving
       const roundData = getRoundDataFn();
       console.log('[HANDLE END ROUND] Round data:', roundData);
 
-      // Store the round data for the summary screen
-      setSavedRoundData({
-        putts: roundData.putts,
-        courseName: roundData.courseName,
-        date: new Date(roundData.startTimestamp)
-      });
-      console.log('[HANDLE END ROUND] Set saved round data');
+      // Check if we're editing an existing round
+      if (editingRoundId && savedRoundData?.roundId) {
+        console.log('[HANDLE END ROUND] Updating existing round:', savedRoundData.roundId);
 
-      // Save the round
-      saveRoundFn();
+        // Update the existing round (keeps same ID, no duplication)
+        await RoundHistory.updateRound(savedRoundData.roundId, {
+          putts: roundData.putts,
+          course: roundData.courseName,
+        });
+
+        // Update savedRoundData with new putts
+        setSavedRoundData({
+          ...savedRoundData,
+          putts: roundData.putts
+        });
+      } else {
+        console.log('[HANDLE END ROUND] Saving new round');
+
+        // Store the round data for the summary screen
+        setSavedRoundData({
+          putts: roundData.putts,
+          courseName: roundData.courseName,
+          date: new Date(roundData.startTimestamp)
+        });
+
+        // Save the round as new
+        saveRoundFn();
+      }
+
+      // Clear active round state
+      ActiveRoundStorage.clearActiveRound();
       setPendingPuttsCount(0);
       setHolesComplete(0);
       setSaveRoundFn(null);
       setGetRoundDataFn(null);
+      setEditingRoundId(null);
+      setOriginalRoundPutts(null);
+
       // Reload recent rounds after saving
-      RoundHistory.getRounds().then(rounds => {
-        setRecentRounds(rounds);
-        // Also reload putts for stats
-        const allPutts = rounds.flatMap(round => round.putts);
-        setPutts(allPutts);
-      });
+      const rounds = await RoundHistory.getRounds();
+      setRecentRounds(rounds);
+      // Also reload putts for stats
+      const allPutts = rounds.flatMap(round => round.putts);
+      setPutts(allPutts);
 
       // Show the round summary
       console.log('[HANDLE END ROUND] Setting showRoundSummary to true');
@@ -601,6 +624,11 @@ export default function Home() {
 
     // Store original putts for comparison later
     setOriginalRoundPutts([...savedRoundData.putts]);
+
+    // Set editing round ID if available
+    if (savedRoundData.roundId) {
+      setEditingRoundId(savedRoundData.roundId);
+    }
 
     // Restore the round data to active storage, targeting the specific hole
     restoreRoundForEditing(
