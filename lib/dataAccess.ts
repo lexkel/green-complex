@@ -141,9 +141,10 @@ export class DataAccess {
   }
 
   /**
-   * Delete a round
+   * Delete a round from both local IndexedDB and Supabase
    */
   static async deleteRound(roundId: string): Promise<void> {
+    // Delete from local database first
     await db.transaction('rw', db.rounds, db.holes, db.putts, async () => {
       // Get holes for this round
       const holes = await db.holes.where('roundId').equals(roundId).toArray();
@@ -158,6 +159,22 @@ export class DataAccess {
       // Delete round
       await db.rounds.delete(roundId);
     });
+
+    // Delete from Supabase (cascade will handle holes and putts)
+    const { supabase } = await import('./supabaseClient');
+    if (supabase) {
+      const { error } = await supabase
+        .from('rounds')
+        .delete()
+        .eq('id', roundId);
+
+      if (error) {
+        console.error('[DataAccess] Error deleting round from Supabase:', error);
+        // Don't throw - local delete already succeeded
+      } else {
+        console.log('[DataAccess] Deleted round from Supabase:', roundId);
+      }
+    }
   }
 
   /**
@@ -349,10 +366,27 @@ export class DataAccess {
   }
 
   /**
-   * Delete a course
+   * Delete a course from both local IndexedDB and Supabase
    */
   static async deleteCourse(courseId: string): Promise<void> {
+    // Delete from local database first
     await db.courses.delete(courseId);
+
+    // Delete from Supabase
+    const { supabase } = await import('./supabaseClient');
+    if (supabase) {
+      const { error } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', courseId);
+
+      if (error) {
+        console.error('[DataAccess] Error deleting course from Supabase:', error);
+        // Don't throw - local delete already succeeded
+      } else {
+        console.log('[DataAccess] Deleted course from Supabase:', courseId);
+      }
+    }
   }
 
   /**
