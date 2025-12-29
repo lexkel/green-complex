@@ -56,6 +56,7 @@ export default function Home() {
   const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
   const [originalRoundPutts, setOriginalRoundPutts] = useState<PuttingAttempt[] | null>(null);
   const [showEditExitConfirmation, setShowEditExitConfirmation] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<'home' | 'entry' | 'stats' | null>(null);
   const [showNewCourseModal, setShowNewCourseModal] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
   const [newCourseHoles, setNewCourseHoles] = useState<Array<{ number: number; par: number; distance: number }>>(
@@ -665,6 +666,38 @@ export default function Home() {
     }
   };
 
+  const handleNavigationAttempt = (targetTab: 'home' | 'entry' | 'stats') => {
+    // If not editing, allow navigation
+    if (!editingRoundId) {
+      setActiveTab(targetTab);
+      return;
+    }
+
+    // If editing, check for changes first
+    if (getRoundDataFn) {
+      const currentData = getRoundDataFn();
+      const currentPutts = currentData.putts;
+
+      const hasChanges = originalRoundPutts &&
+        JSON.stringify(currentPutts) !== JSON.stringify(originalRoundPutts);
+
+      if (hasChanges) {
+        // Store where user wanted to go
+        setPendingNavigation(targetTab);
+        // Show confirmation dialog
+        setShowEditExitConfirmation(true);
+      } else {
+        // No changes, allow navigation
+        exitEditModeWithoutSaving();
+        setActiveTab(targetTab);
+      }
+    } else {
+      // No getRoundDataFn, just exit
+      exitEditModeWithoutSaving();
+      setActiveTab(targetTab);
+    }
+  };
+
   const exitEditModeWithoutSaving = () => {
     // Restore original data
     if (savedRoundData && originalRoundPutts && savedRoundData.roundId) {
@@ -681,6 +714,7 @@ export default function Home() {
     setPendingPuttsCount(0);
     setHolesComplete(0);
     setShowEditExitConfirmation(false);
+    setPendingNavigation(null);
 
     // Return to round summary
     setShowRoundSummary(true);
@@ -1043,7 +1077,7 @@ export default function Home() {
             onRoundStateChange={handleRoundStateChange}
             onRoundComplete={handleRoundComplete}
             resetRound={resetRound}
-            onNavigateHome={() => setActiveTab('home')}
+            onNavigationAttempt={handleNavigationAttempt}
             courseId={selectedCourseId}
             onDiscardRound={() => {
               setPendingPuttsCount(0);
@@ -1073,7 +1107,7 @@ export default function Home() {
 
           <div className="home-content-wrapper">
           {/* Active Round */}
-          {pendingPuttsCount > 0 && (
+          {pendingPuttsCount > 0 && !editingRoundId && (
             <>
               <div className="home-section-header">
                 <h2 className="home-section-title">Active Round</h2>
@@ -1835,14 +1869,14 @@ export default function Home() {
       )}
 
       <nav className="bottom-nav">
-        <button className={activeTab === 'home' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('home')}>
+        <button className={activeTab === 'home' ? 'nav-item active' : 'nav-item'} onClick={() => handleNavigationAttempt('home')}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           <span>Home</span>
         </button>
-        <button className={activeTab === 'stats' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('stats')}>
+        <button className={activeTab === 'stats' ? 'nav-item active' : 'nav-item'} onClick={() => handleNavigationAttempt('stats')}>
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 21v-6"/>
             <path d="M12 21V3"/>
@@ -1939,21 +1973,36 @@ export default function Home() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
               <button
-                onClick={saveEditedRoundAndExit}
+                onClick={async () => {
+                  await saveEditedRoundAndExit();
+                  if (pendingNavigation) {
+                    setActiveTab(pendingNavigation);
+                    setPendingNavigation(null);
+                  }
+                }}
                 className="submit-button"
                 style={{ width: '100%' }}
               >
                 Save Changes
               </button>
               <button
-                onClick={exitEditModeWithoutSaving}
+                onClick={() => {
+                  exitEditModeWithoutSaving();
+                  if (pendingNavigation) {
+                    setActiveTab(pendingNavigation);
+                    setPendingNavigation(null);
+                  }
+                }}
                 className="auth-button logout-button"
                 style={{ width: '100%' }}
               >
                 Discard Changes
               </button>
               <button
-                onClick={() => setShowEditExitConfirmation(false)}
+                onClick={() => {
+                  setShowEditExitConfirmation(false);
+                  setPendingNavigation(null);
+                }}
                 className="auth-button"
                 style={{ width: '100%', background: 'transparent', border: '1px solid var(--color-border)' }}
               >

@@ -15,7 +15,7 @@ interface PuttEntryProps {
   onRoundStateChange?: (pendingCount: number, holesComplete: number, saveRound: () => void, getRoundData: () => {putts: PuttingAttempt[], courseName: string, startTimestamp: string}) => void;
   onRoundComplete?: (roundData: {putts: PuttingAttempt[], courseName: string, startTimestamp: string}) => void;
   resetRound?: boolean; // Trigger to reset the entire round
-  onNavigateHome?: () => void; // Callback to navigate back to home
+  onNavigationAttempt?: (targetTab: 'home' | 'entry' | 'stats') => void; // Callback to navigate with edit check
   onDiscardRound?: () => void; // Callback when round is discarded
   courseId?: string; // Course ID to use for this round
 }
@@ -43,7 +43,7 @@ interface HoleState {
 
 const TAP_IN_DISTANCE = 0.4; // metres
 
-export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigateHome, onDiscardRound, courseId: propCourseId }: PuttEntryProps) {
+export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId }: PuttEntryProps) {
   const [hasRestoredFromStorage, setHasRestoredFromStorage] = useState(false);
   const [pinPosition, setPinPosition] = useState<Position>({ x: 50, y: 50 });
   const [ballPosition, setBallPosition] = useState<Position | null>(null);
@@ -1403,7 +1403,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       {/* Compact Header */}
       <div className="compact-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button className="back-button" onClick={onNavigateHome}>
+          <button className="back-button" onClick={() => onNavigationAttempt?.('home')}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
