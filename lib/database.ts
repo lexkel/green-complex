@@ -13,6 +13,7 @@ export interface Round {
   updatedAt: string;
   dirty: boolean; // True if local changes not yet synced
   syncedAt?: string; // Last successful sync timestamp
+  deleted?: boolean; // True if soft-deleted (for sync)
 }
 
 export interface Hole {
@@ -57,6 +58,7 @@ export interface Course {
   updatedAt: string;
   dirty: boolean;
   syncedAt?: string;
+  deleted?: boolean; // True if soft-deleted (for sync)
 }
 
 // Database class
@@ -88,6 +90,14 @@ export class GreenComplexDB extends Dexie {
       holes: 'id, roundId, holeNumber',
       putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt',
       courses: 'id, userId, updatedAt, dirty, syncedAt',
+    });
+
+    // Version 4: Add deleted flag for soft deletion
+    this.version(4).stores({
+      rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt, deleted',
+      holes: 'id, roundId, holeNumber',
+      putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt',
+      courses: 'id, userId, updatedAt, dirty, syncedAt, deleted',
     });
   }
 }

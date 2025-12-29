@@ -243,6 +243,19 @@ export class SyncService {
       console.log('[Sync] Found', remoteRounds.length, 'remote rounds to sync');
 
       for (const remoteRound of remoteRounds) {
+        // If round is deleted in remote, delete locally
+        if (remoteRound.deleted) {
+          console.log('[Sync] Remote round is deleted, removing locally:', remoteRound.id);
+          await db.transaction('rw', db.rounds, db.holes, db.putts, async () => {
+            const holes = await db.holes.where('roundId').equals(remoteRound.id).toArray();
+            const holeIds = holes.map(h => h.id);
+            await db.putts.where('holeId').anyOf(holeIds).delete();
+            await db.holes.where('roundId').equals(remoteRound.id).delete();
+            await db.rounds.delete(remoteRound.id);
+          });
+          continue;
+        }
+
         // Check if round exists locally
         const localRound = await db.rounds.get(remoteRound.id);
 
@@ -269,7 +282,7 @@ export class SyncService {
         }
 
         // Fetch putts for this round
-        const { data: remotePutts, error: puttsError } = await supabase
+        const { data: remotePutts, error: puttsError} = await supabase
           .from('putts')
           .select('*')
           .eq('round_id', remoteRound.id);
@@ -362,6 +375,13 @@ export class SyncService {
         console.log('[Sync] Found', remoteCourses.length, 'remote courses to sync');
 
         for (const remoteCourse of remoteCourses) {
+          // If course is deleted in remote, delete locally
+          if (remoteCourse.deleted) {
+            console.log('[Sync] Remote course is deleted, removing locally:', remoteCourse.name);
+            await db.courses.delete(remoteCourse.id);
+            continue;
+          }
+
           // Check if course exists locally
           const localCourse = await db.courses.get(remoteCourse.id);
 

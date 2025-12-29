@@ -141,10 +141,30 @@ export class DataAccess {
   }
 
   /**
-   * Delete a round from both local IndexedDB and Supabase
+   * Delete a round (soft delete for sync, hard delete locally)
    */
   static async deleteRound(roundId: string): Promise<void> {
-    // Delete from local database first
+    const now = new Date().toISOString();
+
+    // Mark as deleted in Supabase (soft delete for sync)
+    const { supabase } = await import('./supabaseClient');
+    if (supabase) {
+      const { error } = await supabase
+        .from('rounds')
+        .update({
+          deleted: true,
+          updated_at: now,
+        })
+        .eq('id', roundId);
+
+      if (error) {
+        console.error('[DataAccess] Error soft-deleting round in Supabase:', error);
+      } else {
+        console.log('[DataAccess] Soft-deleted round in Supabase:', roundId);
+      }
+    }
+
+    // Hard delete from local database
     await db.transaction('rw', db.rounds, db.holes, db.putts, async () => {
       // Get holes for this round
       const holes = await db.holes.where('roundId').equals(roundId).toArray();
@@ -159,22 +179,6 @@ export class DataAccess {
       // Delete round
       await db.rounds.delete(roundId);
     });
-
-    // Delete from Supabase (cascade will handle holes and putts)
-    const { supabase } = await import('./supabaseClient');
-    if (supabase) {
-      const { error } = await supabase
-        .from('rounds')
-        .delete()
-        .eq('id', roundId);
-
-      if (error) {
-        console.error('[DataAccess] Error deleting round from Supabase:', error);
-        // Don't throw - local delete already succeeded
-      } else {
-        console.log('[DataAccess] Deleted round from Supabase:', roundId);
-      }
-    }
   }
 
   /**
@@ -366,27 +370,31 @@ export class DataAccess {
   }
 
   /**
-   * Delete a course from both local IndexedDB and Supabase
+   * Delete a course (soft delete for sync, hard delete locally)
    */
   static async deleteCourse(courseId: string): Promise<void> {
-    // Delete from local database first
-    await db.courses.delete(courseId);
+    const now = new Date().toISOString();
 
-    // Delete from Supabase
+    // Mark as deleted in Supabase (soft delete for sync)
     const { supabase } = await import('./supabaseClient');
     if (supabase) {
       const { error } = await supabase
         .from('courses')
-        .delete()
+        .update({
+          deleted: true,
+          updated_at: now,
+        })
         .eq('id', courseId);
 
       if (error) {
-        console.error('[DataAccess] Error deleting course from Supabase:', error);
-        // Don't throw - local delete already succeeded
+        console.error('[DataAccess] Error soft-deleting course in Supabase:', error);
       } else {
-        console.log('[DataAccess] Deleted course from Supabase:', courseId);
+        console.log('[DataAccess] Soft-deleted course in Supabase:', courseId);
       }
     }
+
+    // Hard delete from local database
+    await db.courses.delete(courseId);
   }
 
   /**
