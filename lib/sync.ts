@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { db, Round, Hole, Putt } from './database';
+import { db, Round, Hole, Putt, Course } from './database';
 import { UserIdentity } from './userIdentity';
 
 export interface SyncStatus {
@@ -19,11 +19,12 @@ export class SyncService {
   static async getSyncStatus(): Promise<SyncStatus> {
     const dirtyRounds = await db.rounds.filter(r => r.dirty === true).count();
     const dirtyPutts = await db.putts.filter(p => p.dirty === true).count();
+    const dirtyCourses = await db.courses.filter(c => c.dirty === true).count();
 
     return {
       lastSyncAt: this.lastSyncTime,
       isSyncing: this.syncInProgress,
-      pendingChanges: dirtyRounds + dirtyPutts,
+      pendingChanges: dirtyRounds + dirtyPutts + dirtyCourses,
       lastError: null, // TODO: Track errors
     };
   }
@@ -146,6 +147,39 @@ export class SyncService {
         });
 
         console.log('[Sync] Synced round:', round.id);
+      }
+
+      // Get all dirty courses
+      const dirtyCourses = await db.courses.filter(c => c.dirty === true).toArray();
+
+      for (const course of dirtyCourses) {
+        // Upsert course to Supabase
+        const { error: courseError } = await supabase
+          .from('courses')
+          .upsert({
+            id: course.id,
+            user_id: course.userId,
+            name: course.name,
+            holes: JSON.parse(course.holes),
+            green_shapes: course.greenShapes ? JSON.parse(course.greenShapes) : null,
+            created_at: course.createdAt,
+            updated_at: course.updatedAt,
+          }, {
+            onConflict: 'id',
+          });
+
+        if (courseError) {
+          console.error('[Sync] Error syncing course:', courseError);
+          continue;
+        }
+
+        // Mark course as clean
+        await db.courses.update(course.id, {
+          dirty: false,
+          syncedAt: new Date().toISOString(),
+        });
+
+        console.log('[Sync] Synced course:', course.name);
       }
 
       this.lastSyncTime = new Date().toISOString();
@@ -303,6 +337,60 @@ export class SyncService {
         });
 
         console.log('[Sync] Synced down round:', remoteRound.id);
+      }
+
+      // Sync courses
+      const lastSyncedCourse = await db.courses
+        .where('syncedAt')
+        .above('')
+        .reverse()
+        .sortBy('syncedAt');
+
+      const lastCourseSyncTime = lastSyncedCourse[0]?.syncedAt || '1970-01-01T00:00:00.000Z';
+
+      // Fetch courses updated since last sync
+      const { data: remoteCourses, error: coursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', userId)
+        .gt('updated_at', lastCourseSyncTime)
+        .order('updated_at', { ascending: true });
+
+      if (coursesError) {
+        console.error('[Sync] Error fetching remote courses:', coursesError);
+      } else if (remoteCourses && remoteCourses.length > 0) {
+        console.log('[Sync] Found', remoteCourses.length, 'remote courses to sync');
+
+        for (const remoteCourse of remoteCourses) {
+          // Check if course exists locally
+          const localCourse = await db.courses.get(remoteCourse.id);
+
+          // Conflict resolution: last-write-wins by updatedAt
+          if (localCourse) {
+            const localTime = new Date(localCourse.updatedAt).getTime();
+            const remoteTime = new Date(remoteCourse.updated_at).getTime();
+
+            if (localTime > remoteTime) {
+              console.log('[Sync] Local course is newer, keeping local version:', remoteCourse.name);
+              continue; // Skip this course, local is newer
+            }
+          }
+
+          // Save to local database
+          await db.courses.put({
+            id: remoteCourse.id,
+            userId: remoteCourse.user_id,
+            name: remoteCourse.name,
+            holes: JSON.stringify(remoteCourse.holes),
+            greenShapes: remoteCourse.green_shapes ? JSON.stringify(remoteCourse.green_shapes) : '{}',
+            createdAt: remoteCourse.created_at,
+            updatedAt: remoteCourse.updated_at,
+            dirty: false, // Remote data is clean
+            syncedAt: new Date().toISOString(),
+          });
+
+          console.log('[Sync] Synced down course:', remoteCourse.name);
+        }
       }
 
       this.lastSyncTime = new Date().toISOString();

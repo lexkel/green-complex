@@ -15,6 +15,7 @@ import { COURSES, CourseData, HoleData } from '@/data/courses';
 import { UserIdentity } from '@/lib/userIdentity';
 import { DataMigration } from '@/lib/migration';
 import { SyncService, SyncStatus } from '@/lib/sync';
+import { DataAccess } from '@/lib/dataAccess';
 
 // Sample data for demo mode
 const DEMO_PUTTS: PuttingAttempt[] = [
@@ -79,9 +80,10 @@ export default function Home() {
       const { id, isNew } = UserIdentity.getUserId();
       console.log('[App] User ID:', id, 'Is new:', isNew);
 
-      // Run migration from localStorage to IndexedDB
+      // Run migrations from localStorage to IndexedDB
       try {
         await DataMigration.migrateFromLocalStorage();
+        await DataMigration.migrateCoursesFromLocalStorage();
         migrationCompleteRef.current = true;
         console.log('[App] Data migration complete');
 
@@ -155,10 +157,18 @@ export default function Home() {
           setActiveRoundInfo({ courseName: activeRound.courseName, startTime: activeRound.startTime });
         }
 
-        // Load custom courses from localStorage
-        const savedCustomCourses = localStorage.getItem('customCourses');
-        if (savedCustomCourses) {
-          setCustomCourses(JSON.parse(savedCustomCourses));
+        // Load custom courses from IndexedDB
+        try {
+          const courses = await DataAccess.getCourses();
+          const formattedCourses: CourseData[] = courses.map(c => ({
+            id: c.id,
+            name: c.name,
+            holes: JSON.parse(c.holes),
+            greenShapes: c.greenShapes ? JSON.parse(c.greenShapes) : undefined,
+          }));
+          setCustomCourses(formattedCourses);
+        } catch (error) {
+          console.error('[App] Error loading courses:', error);
         }
       };
 
@@ -234,66 +244,50 @@ export default function Home() {
     }
   };
 
-  const handleSaveNewCourse = () => {
+  const handleSaveNewCourse = async () => {
     if (!newCourseName.trim()) return;
 
-    if (editingCourseId) {
-      // Check if this is a built-in course being edited (create override)
-      const isBuiltIn = COURSES.some(c => c.id === editingCourseId);
+    try {
+      if (editingCourseId) {
+        // Editing existing course
+        await DataAccess.updateCourse(editingCourseId, {
+          name: newCourseName,
+          holes: newCourseHoles,
+        });
 
-      if (isBuiltIn) {
-        // Create custom override for built-in course
-        const existingCustomIndex = customCourses.findIndex(c => c.id === editingCourseId);
-        let updatedCustomCourses;
-
-        if (existingCustomIndex >= 0) {
-          // Update existing override
-          updatedCustomCourses = customCourses.map(course =>
-            course.id === editingCourseId
-              ? { ...course, name: newCourseName, holes: newCourseHoles }
-              : course
-          );
-        } else {
-          // Create new override
-          const customOverride: CourseData = {
-            id: editingCourseId, // Keep same ID as built-in
-            name: newCourseName,
-            holes: newCourseHoles
-          };
-          updatedCustomCourses = [...customCourses, customOverride];
-        }
-
-        setCustomCourses(updatedCustomCourses);
-        localStorage.setItem('customCourses', JSON.stringify(updatedCustomCourses));
-      } else {
-        // Editing existing custom course
+        // Update local state
         const updatedCustomCourses = customCourses.map(course =>
           course.id === editingCourseId
             ? { ...course, name: newCourseName, holes: newCourseHoles }
             : course
         );
         setCustomCourses(updatedCustomCourses);
-        localStorage.setItem('customCourses', JSON.stringify(updatedCustomCourses));
+      } else {
+        // Creating new course
+        const courseId = await DataAccess.saveCourse(
+          newCourseName,
+          newCourseHoles,
+          null
+        );
+
+        const newCourse: CourseData = {
+          id: courseId,
+          name: newCourseName,
+          holes: newCourseHoles
+        };
+
+        setCustomCourses([...customCourses, newCourse]);
       }
-    } else {
-      // Creating new course
-      const courseId = newCourseName.toLowerCase().replace(/\s+/g, '-');
-      const newCourse: CourseData = {
-        id: courseId,
-        name: newCourseName,
-        holes: newCourseHoles
-      };
 
-      const updatedCustomCourses = [...customCourses, newCourse];
-      setCustomCourses(updatedCustomCourses);
-      localStorage.setItem('customCourses', JSON.stringify(updatedCustomCourses));
+      // Reset form
+      setNewCourseName('');
+      setNewCourseHoles(Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, distance: 350 })));
+      setShowNewCourseModal(false);
+      setEditingCourseId(null);
+    } catch (error) {
+      console.error('[App] Error saving course:', error);
+      alert('Failed to save course. Please try again.');
     }
-
-    // Reset form
-    setNewCourseName('');
-    setNewCourseHoles(Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, distance: 350 })));
-    setShowNewCourseModal(false);
-    setEditingCourseId(null);
   };
 
   const handleCancelNewCourse = () => {
@@ -310,24 +304,22 @@ export default function Home() {
     setShowNewCourseModal(true);
   };
 
-  const handleDeleteCourse = (courseId: string) => {
-    // Check if this is an override of a built-in course
-    const isBuiltInOverride = COURSES.some(c => c.id === courseId);
+  const handleDeleteCourse = async (courseId: string) => {
+    // Check if this is a custom course (all courses in customCourses are now from IndexedDB)
+    const customCourse = customCourses.find(c => c.id === courseId);
 
-    if (isBuiltInOverride) {
-      // Deleting an override - revert to built-in
-      if (confirm('This will revert to the default course settings. Continue?')) {
-        const updatedCustomCourses = customCourses.filter(c => c.id !== courseId);
-        setCustomCourses(updatedCustomCourses);
-        localStorage.setItem('customCourses', JSON.stringify(updatedCustomCourses));
-      }
-    } else {
-      // Deleting a fully custom course
+    if (!customCourse) return;
+
+    try {
       if (confirm('Are you sure you want to delete this course?')) {
+        await DataAccess.deleteCourse(courseId);
+
         const updatedCustomCourses = customCourses.filter(c => c.id !== courseId);
         setCustomCourses(updatedCustomCourses);
-        localStorage.setItem('customCourses', JSON.stringify(updatedCustomCourses));
       }
+    } catch (error) {
+      console.error('[App] Error deleting course:', error);
+      alert('Failed to delete course. Please try again.');
     }
   };
 

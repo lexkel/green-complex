@@ -1,4 +1,4 @@
-import { db, Round, Hole, Putt } from './database';
+import { db, Round, Hole, Putt, Course } from './database';
 import { UserIdentity } from './userIdentity';
 import { PuttingAttempt } from '@/types';
 
@@ -167,8 +167,110 @@ export class DataAccess {
     const rounds = await db.rounds.count();
     const holes = await db.holes.count();
     const putts = await db.putts.count();
+    const courses = await db.courses.count();
 
     // Rough estimate in KB
-    return (rounds * 0.5) + (holes * 0.2) + (putts * 0.3);
+    return (rounds * 0.5) + (holes * 0.2) + (putts * 0.3) + (courses * 0.5);
+  }
+
+  /**
+   * Save a course to IndexedDB
+   * Accepts optional timestamps to preserve historical data during migration
+   */
+  static async saveCourse(
+    name: string,
+    holes: any[],
+    greenShapes: any,
+    options?: {
+      courseId?: string;
+      createdAt?: string;
+      updatedAt?: string;
+    }
+  ): Promise<string> {
+    const { id: userId } = UserIdentity.getUserId();
+    const courseId = options?.courseId || crypto.randomUUID();
+    const now = new Date().toISOString();
+    const createdAt = options?.createdAt || now;
+    const updatedAt = options?.updatedAt || now;
+
+    const course: Course = {
+      id: courseId,
+      userId,
+      name,
+      holes: JSON.stringify(holes),
+      greenShapes: JSON.stringify(greenShapes),
+      createdAt,
+      updatedAt,
+      dirty: true, // New data always marked dirty until synced
+    };
+
+    await db.courses.put(course);
+
+    return courseId;
+  }
+
+  /**
+   * Get all courses for current user
+   */
+  static async getCourses(): Promise<Course[]> {
+    const { id: userId } = UserIdentity.getUserId();
+    return db.courses
+      .where('userId')
+      .equals(userId)
+      .sortBy('name');
+  }
+
+  /**
+   * Update a course
+   */
+  static async updateCourse(
+    courseId: string,
+    updates: {
+      name?: string;
+      holes?: any[];
+      greenShapes?: any;
+    }
+  ): Promise<void> {
+    const course = await db.courses.get(courseId);
+    if (!course) {
+      throw new Error('Course not found');
+    }
+
+    const updateData: Partial<Course> = {
+      updatedAt: new Date().toISOString(),
+      dirty: true,
+    };
+
+    if (updates.name !== undefined) {
+      updateData.name = updates.name;
+    }
+    if (updates.holes !== undefined) {
+      updateData.holes = JSON.stringify(updates.holes);
+    }
+    if (updates.greenShapes !== undefined) {
+      updateData.greenShapes = JSON.stringify(updates.greenShapes);
+    }
+
+    await db.courses.update(courseId, updateData);
+  }
+
+  /**
+   * Delete a course
+   */
+  static async deleteCourse(courseId: string): Promise<void> {
+    await db.courses.delete(courseId);
+  }
+
+  /**
+   * Get course by name
+   */
+  static async getCourseByName(name: string): Promise<Course | undefined> {
+    const { id: userId } = UserIdentity.getUserId();
+    const courses = await db.courses
+      .where('userId')
+      .equals(userId)
+      .toArray();
+
+    return courses.find(c => c.name === name);
   }
 }

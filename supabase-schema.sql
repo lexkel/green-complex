@@ -58,6 +58,20 @@ create index idx_putts_user_id on putts(user_id);
 create index idx_putts_round_id on putts(round_id);
 create index idx_putts_updated_at on putts(updated_at desc);
 
+-- Courses table
+create table courses (
+  id uuid primary key,
+  user_id uuid not null,
+  name text not null,
+  holes jsonb not null,
+  green_shapes jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_courses_user_id on courses(user_id);
+create index idx_courses_updated_at on courses(updated_at desc);
+
 -- Row Level Security (RLS) Policies
 -- NOTE: Since we're using soft identity (no traditional auth), we'll disable RLS
 -- This trusts the client to only access data for their user_id
@@ -67,6 +81,7 @@ create index idx_putts_updated_at on putts(updated_at desc);
 alter table rounds disable row level security;
 alter table holes disable row level security;
 alter table putts disable row level security;
+alter table courses disable row level security;
 
 -- Option 2: Enable RLS with policies (if using Supabase Auth)
 -- Uncomment the lines below if you implement traditional authentication:
@@ -131,6 +146,9 @@ create trigger update_holes_updated_at before update on holes
   for each row execute function update_updated_at_column();
 
 create trigger update_putts_updated_at before update on putts
+  for each row execute function update_updated_at_column();
+
+create trigger update_courses_updated_at before update on courses
   for each row execute function update_updated_at_column();
 
 -- Success message

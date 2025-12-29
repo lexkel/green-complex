@@ -47,11 +47,24 @@ export interface Putt {
   syncedAt?: string; // Last successful sync timestamp
 }
 
+export interface Course {
+  id: string;
+  userId: string;
+  name: string;
+  holes: string; // JSON string of hole data
+  greenShapes: string; // JSON string of green shapes
+  createdAt: string;
+  updatedAt: string;
+  dirty: boolean;
+  syncedAt?: string;
+}
+
 // Database class
 export class GreenComplexDB extends Dexie {
   rounds!: Table<Round>;
   holes!: Table<Hole>;
   putts!: Table<Putt>;
+  courses!: Table<Course>;
 
   constructor() {
     super('GreenComplexDB');
@@ -67,6 +80,14 @@ export class GreenComplexDB extends Dexie {
       rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt',
       holes: 'id, roundId, holeNumber',
       putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt',
+    });
+
+    // Version 3: Add courses table
+    this.version(3).stores({
+      rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt',
+      holes: 'id, roundId, holeNumber',
+      putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt',
+      courses: 'id, userId, updatedAt, dirty, syncedAt',
     });
   }
 }
