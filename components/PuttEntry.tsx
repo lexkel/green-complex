@@ -7,6 +7,7 @@ import { NEANGAR_PARK, COURSES, getHoleData, GreenShape, HoleData, CourseData } 
 import { RoundHistory } from '@/lib/roundHistory';
 import { ActiveRoundStorage, ActiveRoundData, HoleState as ActiveHoleState } from '@/lib/activeRound';
 import { GreenShapeImporter } from '@/lib/greenShapeImporter';
+import { DataAccess } from '@/lib/dataAccess';
 
 interface PuttEntryProps {
   onAddPutt: (putt: PuttingAttempt) => void;
@@ -66,6 +67,28 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
   // Hole selector modal
   const [showHoleSelector, setShowHoleSelector] = useState(false);
+
+  // Custom courses from IndexedDB
+  const [customCourses, setCustomCourses] = useState<CourseData[]>([]);
+
+  // Load custom courses from IndexedDB on mount
+  useEffect(() => {
+    const loadCustomCourses = async () => {
+      try {
+        const courses = await DataAccess.getCourses();
+        const formattedCourses: CourseData[] = courses.map(c => ({
+          id: c.id,
+          name: c.name,
+          holes: JSON.parse(c.holes),
+          greenShapes: c.greenShapes ? JSON.parse(c.greenShapes) : undefined,
+        }));
+        setCustomCourses(formattedCourses);
+      } catch (error) {
+        console.error('[PuttEntry] Error loading custom courses:', error);
+      }
+    };
+    loadCustomCourses();
+  }, []);
 
   // Update courseId when prop changes
   useEffect(() => {
@@ -221,9 +244,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     // First try built-in courses
     let currentHole = getHoleData(courseId, hole);
 
-    // If not found, try custom courses from localStorage
-    if (!currentHole && typeof window !== 'undefined') {
-      const customCourses: CourseData[] = JSON.parse(localStorage.getItem('customCourses') || '[]');
+    // If not found, try custom courses from IndexedDB (loaded in state)
+    if (!currentHole) {
       const course = customCourses.find(c => c.id === courseId);
       currentHole = course?.holes.find(h => h.number === hole);
     }
