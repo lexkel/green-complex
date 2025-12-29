@@ -2682,8 +2682,6 @@ button{
   background: #1a1a1a;
   border-radius: 1rem;
   overflow: hidden;
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 .round-summary-hole-item {

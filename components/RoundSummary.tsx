@@ -140,9 +140,12 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                 style={{ fontSize: '1.25rem', fontWeight: '600' }}
               />
             ) : (
-              <h2 onClick={() => setIsEditingCourse(true)} style={{ cursor: 'pointer' }}>
-                {courseName}
-              </h2>
+              <div onClick={() => setIsEditingCourse(true)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ margin: 0 }}>
+                  {courseName}
+                </h2>
+                <Pencil size={16} style={{ color: '#999', flexShrink: 0 }} />
+              </div>
             )}
             {isEditingDate ? (
               <input
@@ -157,9 +160,12 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                 autoFocus
               />
             ) : (
-              <p onClick={() => setIsEditingDate(true)} style={{ cursor: 'pointer' }}>
-                {formatDate(date)} • {holesPlayed} Hole{holesPlayed !== 1 ? 's' : ''}
-              </p>
+              <div onClick={() => setIsEditingDate(true)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <p style={{ margin: 0 }}>
+                  {formatDate(date)} • {holesPlayed} Hole{holesPlayed !== 1 ? 's' : ''}
+                </p>
+                <Pencil size={14} style={{ color: '#999', flexShrink: 0 }} />
+              </div>
             )}
           </div>
           <div className="round-summary-total-putts">
