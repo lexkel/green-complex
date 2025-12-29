@@ -1715,6 +1715,21 @@ export default function Home() {
                         await SyncService.sync();
                         const status = await SyncService.getSyncStatus();
                         setSyncStatus(status);
+
+                        // Reload courses after sync
+                        try {
+                          const courses = await DataAccess.getCourses();
+                          const formattedCourses: CourseData[] = courses.map(c => ({
+                            id: c.id,
+                            name: c.name,
+                            holes: JSON.parse(c.holes),
+                            greenShapes: c.greenShapes ? JSON.parse(c.greenShapes) : undefined,
+                          }));
+                          setCustomCourses(formattedCourses);
+                        } catch (error) {
+                          console.error('[Sync] Error reloading courses:', error);
+                        }
+
                         alert('Sync complete!');
                       }}
                       disabled={syncStatus.isSyncing}
