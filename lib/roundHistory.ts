@@ -63,7 +63,7 @@ export class RoundHistory {
 
         return {
           id: round.id,
-          timestamp: round.createdAt,
+          timestamp: round.date, // Use the date field (editable) not createdAt (immutable)
           course: round.course,
           putts: puttingAttempts,
           holesPlayed: round.holesPlayed,
