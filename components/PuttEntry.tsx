@@ -71,6 +71,9 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   // Custom courses from IndexedDB
   const [customCourses, setCustomCourses] = useState<CourseData[]>([]);
 
+  // Current hole data (needs to be in state to react to customCourses changes)
+  const [currentHoleData, setCurrentHoleData] = useState<HoleData | undefined>(undefined);
+
   // Load custom courses from IndexedDB on mount
   useEffect(() => {
     const loadCustomCourses = async () => {
@@ -96,6 +99,20 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       setCourseId(propCourseId);
     }
   }, [propCourseId]);
+
+  // Update current hole data when hole, courseId, or customCourses change
+  useEffect(() => {
+    // First try built-in courses
+    let holeData = getHoleData(courseId, hole);
+
+    // If not found, try custom courses from IndexedDB (loaded in state)
+    if (!holeData) {
+      const course = customCourses.find(c => c.id === courseId);
+      holeData = course?.holes.find(h => h.number === hole);
+    }
+
+    setCurrentHoleData(holeData);
+  }, [hole, courseId, customCourses]);
 
   // Notify parent when pending putts change
   useEffect(() => {
@@ -239,33 +256,18 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only on component mount
 
-  // Get current hole data from course (including custom courses from localStorage)
-  const getCurrentHoleData = (): HoleData | undefined => {
-    // First try built-in courses
-    let currentHole = getHoleData(courseId, hole);
-
-    // If not found, try custom courses from IndexedDB (loaded in state)
-    if (!currentHole) {
-      const course = customCourses.find(c => c.id === courseId);
-      currentHole = course?.holes.find(h => h.number === hole);
-    }
-
-    return currentHole;
-  };
-
-  const currentHole = getCurrentHoleData();
-  const par = currentHole?.par || 4;
-  const holeDistance = currentHole?.distance || 0;
+  const par = currentHoleData?.par || 4;
+  const holeDistance = currentHoleData?.distance || 0;
 
   // Load green shape from course data when hole changes
   useEffect(() => {
-    if (currentHole?.greenShape) {
-      setGreenShapeData(currentHole.greenShape);
+    if (currentHoleData?.greenShape) {
+      setGreenShapeData(currentHoleData.greenShape);
     } else {
       // Fallback to default ellipse for backward compatibility
       setGreenShapeData(GreenShapeImporter.createDefaultEllipse());
     }
-  }, [hole, courseId, currentHole]);
+  }, [currentHoleData]);
 
   const [holeComplete, setHoleComplete] = useState(false);
   const [distanceInputValue, setDistanceInputValue] = useState<string>('_._');
