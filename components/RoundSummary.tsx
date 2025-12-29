@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { PuttingAttempt } from '@/types';
-import { Check, Pencil } from 'lucide-react';
+import { Check, Edit3 } from 'lucide-react';
 
 interface RoundSummaryProps {
   putts: PuttingAttempt[];
@@ -11,6 +11,7 @@ interface RoundSummaryProps {
   onDone: () => void;
   onEditMetadata?: (courseName: string, date: Date) => void;
   onEditHole?: (holeNumber: number) => void;
+  onAddHole?: (holeNumber: number) => void; // Callback to add a new hole
   isHistorical?: boolean; // Whether viewing a saved round from history
 }
 
@@ -21,11 +22,12 @@ interface HoleSummary {
   holedDistance: number;
 }
 
-export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, onEditHole, isHistorical = false }: RoundSummaryProps) {
+export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, onEditHole, onAddHole, isHistorical = false }: RoundSummaryProps) {
   const [editCourseName, setEditCourseName] = useState(courseName);
   const [editDate, setEditDate] = useState(date);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [isEditingDate, setIsEditingDate] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false); // Master edit mode toggle
 
   // Sync props with local state when they change
   useEffect(() => {
@@ -109,10 +111,34 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
     setIsEditingDate(false);
   };
 
+  // Calculate next hole to add
+  const playedHoles = Array.from(new Set(putts.map(p => p.holeNumber).filter(h => h !== undefined)));
+  const maxHole = playedHoles.length > 0 ? Math.max(...playedHoles) : 0;
+
+  // Determine next hole: if max < 18, add max+1, otherwise find first missing hole starting from 1
+  let nextHole = 1;
+  if (maxHole < 18) {
+    nextHole = maxHole + 1;
+  } else {
+    // Find first hole not played
+    for (let i = 1; i <= 18; i++) {
+      if (!playedHoles.includes(i)) {
+        nextHole = i;
+        break;
+      }
+    }
+  }
+
+  const handleAddHole = () => {
+    if (onAddHole) {
+      onAddHole(nextHole);
+    }
+  };
+
   return (
     <div className="round-summary">
       <div className="round-summary-content">
-        {/* Header */}
+        {/* Header with edit toggle */}
         <div className="round-summary-header">
           <div className="round-summary-success-icon">
             <Check size={32} strokeWidth={3} />
@@ -121,6 +147,31 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
           <p className="round-summary-subtitle">
             {isHistorical ? 'Round summary' : 'Your round has been saved successfully'}
           </p>
+          {/* Edit mode toggle button */}
+          {(onEditMetadata || onEditHole) && (
+            <button
+              onClick={() => setIsEditMode(!isEditMode)}
+              className="round-summary-edit-toggle"
+              aria-label={isEditMode ? 'Exit edit mode' : 'Enter edit mode'}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: isEditMode ? '#4CAF50' : '#444',
+                color: isEditMode ? 'white' : '#ccc',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Edit3 size={18} />
+            </button>
+          )}
         </div>
 
         {/* Main stats card */}
@@ -140,12 +191,15 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                 style={{ fontSize: '1.25rem', fontWeight: '600' }}
               />
             ) : (
-              <div onClick={() => setIsEditingCourse(true)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h2 style={{ margin: 0 }}>
-                  {courseName}
-                </h2>
-                <Pencil size={16} style={{ color: '#999', flexShrink: 0 }} />
-              </div>
+              <h2
+                onClick={() => isEditMode && setIsEditingCourse(true)}
+                style={{
+                  cursor: isEditMode ? 'pointer' : 'default',
+                  margin: 0
+                }}
+              >
+                {courseName}
+              </h2>
             )}
             {isEditingDate ? (
               <input
@@ -160,17 +214,22 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                 autoFocus
               />
             ) : (
-              <div onClick={() => setIsEditingDate(true)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <p style={{ margin: 0 }}>
-                  {formatDate(date)} • {holesPlayed} Hole{holesPlayed !== 1 ? 's' : ''}
-                </p>
-                <Pencil size={14} style={{ color: '#999', flexShrink: 0 }} />
-              </div>
+              <p
+                onClick={() => isEditMode && setIsEditingDate(true)}
+                style={{
+                  cursor: isEditMode ? 'pointer' : 'default',
+                  margin: 0
+                }}
+              >
+                {formatDate(date)}
+              </p>
             )}
           </div>
           <div className="round-summary-total-putts">
             <div className="round-summary-putts-number">{totalPutts}</div>
-            <div className="round-summary-putts-label">Total putts</div>
+            <div className="round-summary-putts-label">
+              Total putts • {holesPlayed} Hole{holesPlayed !== 1 ? 's' : ''}
+            </div>
           </div>
         </div>
 
@@ -257,7 +316,14 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
           <h3 className="round-summary-breakdown-title">Hole by Hole</h3>
           <div className="round-summary-hole-list">
             {holeSummaries.map((holeSummary) => (
-              <div key={holeSummary.hole} className="round-summary-hole-item">
+              <div
+                key={holeSummary.hole}
+                className="round-summary-hole-item"
+                onClick={() => isEditMode && onEditHole && onEditHole(holeSummary.hole)}
+                style={{
+                  cursor: isEditMode && onEditHole ? 'pointer' : 'default'
+                }}
+              >
                 <div className="round-summary-hole-number">
                   Hole {holeSummary.hole}
                 </div>
@@ -267,24 +333,28 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                 <div className="round-summary-hole-distance">
                   Holed from {holeSummary.holedDistance.toFixed(1)}m
                 </div>
-                {onEditHole && (
-                  <button
-                    className="round-summary-hole-edit"
-                    onClick={() => onEditHole(holeSummary.hole)}
-                    aria-label={`Edit hole ${holeSummary.hole}`}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                )}
               </div>
             ))}
+            {/* Add hole button - shown when < 18 holes and in edit mode */}
+            {holesPlayed < 18 && onAddHole && isEditMode && (
+              <button
+                onClick={handleAddHole}
+                className="home-round-action-button home-round-view-button"
+                style={{
+                  width: '100%',
+                  marginTop: '8px',
+                }}
+              >
+                + Add hole {nextHole}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Fixed footer with Done button */}
       <div className="round-summary-footer">
-        <button className="round-summary-done-button" onClick={onDone}>
+        <button style={{width: '100%'}} className="home-round-action-button home-round-view-button" onClick={onDone}>
           Done
         </button>
       </div>

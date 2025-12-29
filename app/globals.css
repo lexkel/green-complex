@@ -2751,7 +2751,7 @@ button{
 }
 
 .round-summary-done-button {
-  width: 100%;
+  width: 100% !important;
   background: white;
   color: black;
   border: none;

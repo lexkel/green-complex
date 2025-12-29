@@ -57,6 +57,7 @@ export default function Home() {
   const [originalRoundPutts, setOriginalRoundPutts] = useState<PuttingAttempt[] | null>(null);
   const [showEditExitConfirmation, setShowEditExitConfirmation] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<'home' | 'entry' | 'stats' | null>(null);
+  const [pendingRoundData, setPendingRoundData] = useState<{putts: PuttingAttempt[], courseName: string, startTimestamp: string} | null>(null);
   const [showNewCourseModal, setShowNewCourseModal] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
   const [newCourseHoles, setNewCourseHoles] = useState<Array<{ number: number; par: number; distance: number }>>(
@@ -412,6 +413,7 @@ export default function Home() {
 
   const handleRoundComplete = (roundData: {putts: PuttingAttempt[], courseName: string, startTimestamp: string}) => {
     console.log('[HANDLE ROUND COMPLETE] Round completed from PuttEntry:', roundData);
+    console.log('[HANDLE ROUND COMPLETE] Round data putts count:', roundData.putts.length);
 
     // If we're showing the edit exit confirmation, don't complete the round
     // The user is trying to exit edit mode, not finish the round
@@ -422,7 +424,9 @@ export default function Home() {
 
     // If we're in edit mode, don't auto-complete - user should explicitly save
     if (editingRoundId) {
-      console.log('[HANDLE ROUND COMPLETE] In edit mode, showing confirmation instead');
+      console.log('[HANDLE ROUND COMPLETE] In edit mode, storing round data and showing confirmation');
+      // Store the round data so we can use it when user clicks "Save Changes"
+      setPendingRoundData(roundData);
       setShowEditExitConfirmation(true);
       return;
     }
@@ -670,6 +674,43 @@ export default function Home() {
     setActiveTab('entry');
   };
 
+  const handleAddHole = (holeNumber: number) => {
+    if (!savedRoundData) return;
+
+    // Store original putts for comparison later (if not already editing)
+    if (!editingRoundId) {
+      setOriginalRoundPutts([...savedRoundData.putts]);
+    }
+
+    // Set editing round ID if available
+    if (savedRoundData.roundId) {
+      setEditingRoundId(savedRoundData.roundId);
+    }
+
+    // Restore the round data to active storage, targeting the new hole
+    restoreRoundForEditing(
+      savedRoundData.putts,
+      savedRoundData.courseName,
+      savedRoundData.date.toISOString(),
+      holeNumber
+    );
+
+    // Set up getRoundDataFn immediately for edit mode (prevents race condition)
+    const getEditRoundData = () => {
+      const activeRound = ActiveRoundStorage.loadActiveRound();
+      return {
+        putts: activeRound?.pendingPutts || [],
+        courseName: activeRound?.courseName || savedRoundData.courseName,
+        startTimestamp: activeRound?.startTimestamp || savedRoundData.date.toISOString()
+      };
+    };
+    setGetRoundDataFn(() => getEditRoundData);
+
+    // Close summary and navigate to entry tab
+    setShowRoundSummary(false);
+    setActiveTab('entry');
+  };
+
   const handleExitEditMode = () => {
     // Check if changes were made
     if (getRoundDataFn) {
@@ -770,31 +811,48 @@ export default function Home() {
 
   const saveEditedRoundAndExit = async () => {
     console.log('[SAVE] saveEditedRoundAndExit called');
-    console.log('[SAVE] getRoundDataFn:', getRoundDataFn ? 'exists' : 'NULL');
+    console.log('[SAVE] pendingRoundData:', pendingRoundData);
     console.log('[SAVE] savedRoundData:', savedRoundData);
-    if (!getRoundDataFn || !savedRoundData || !savedRoundData.roundId) {
+
+    // Use pendingRoundData if available (from "Finish Round"), otherwise use getRoundDataFn (from "Back" button)
+    let currentData: {putts: PuttingAttempt[], courseName: string, startTimestamp: string} | null = null;
+
+    if (pendingRoundData) {
+      console.log('[SAVE] Using pending round data from Finish Round button');
+      currentData = pendingRoundData;
+    } else if (getRoundDataFn) {
+      console.log('[SAVE] Using getRoundDataFn from Back button');
+      currentData = getRoundDataFn();
+    }
+
+    if (!currentData || !savedRoundData || !savedRoundData.roundId) {
       console.error('[SAVE] Missing required data, returning');
       return;
     }
 
-    // Get current round data
-    const currentData = getRoundDataFn();
+    console.log('[SAVE] Current data:', currentData);
+    console.log('[SAVE] Current putts count:', currentData.putts.length);
 
     // Update the existing round (keeps same ID, no duplication)
+    console.log('[SAVE] Updating round:', savedRoundData.roundId);
     await RoundHistory.updateRound(savedRoundData.roundId, {
       putts: currentData.putts,
       course: savedRoundData.courseName,
     });
+    console.log('[SAVE] Round updated successfully');
 
     // Update savedRoundData with new putts
-    setSavedRoundData({
+    const updatedData = {
       ...savedRoundData,
       putts: currentData.putts
-    });
+    };
+    console.log('[SAVE] Setting savedRoundData with', updatedData.putts.length, 'putts');
+    setSavedRoundData(updatedData);
 
     // Reload recent rounds
     const rounds = await RoundHistory.getRounds();
     setRecentRounds(rounds);
+    console.log('[SAVE] Reloaded recent rounds, count:', rounds.length);
 
     // Clear active round and editing state
     ActiveRoundStorage.clearActiveRound();
@@ -803,8 +861,10 @@ export default function Home() {
     setPendingPuttsCount(0);
     setHolesComplete(0);
     setShowEditExitConfirmation(false);
+    setPendingRoundData(null); // Clear pending round data
 
     // Return to round summary
+    console.log('[SAVE] Showing round summary');
     setShowRoundSummary(true);
   };
 
@@ -1035,6 +1095,7 @@ export default function Home() {
             isHistorical={isViewingHistoricalRound}
             onEditMetadata={handleEditRoundMetadata}
             onEditHole={handleEditHole}
+            onAddHole={handleAddHole}
             onDone={() => {
               console.log('[ROUND SUMMARY] Done button clicked');
               setShowRoundSummary(false);
@@ -1209,6 +1270,7 @@ export default function Home() {
               resetRound={resetRound}
               onNavigationAttempt={handleNavigationAttempt}
               courseId={selectedCourseId}
+              isEditingRound={!!editingRoundId}
               onDiscardRound={() => {
                 setPendingPuttsCount(0);
                 setHolesComplete(0);

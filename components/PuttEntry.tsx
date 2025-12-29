@@ -18,6 +18,7 @@ interface PuttEntryProps {
   onNavigationAttempt?: (targetTab: 'home' | 'entry' | 'stats') => void; // Callback to navigate with edit check
   onDiscardRound?: () => void; // Callback when round is discarded
   courseId?: string; // Course ID to use for this round
+  isEditingRound?: boolean; // True when editing an existing round (prevents duplicate saves)
 }
 
 interface Position {
@@ -43,7 +44,7 @@ interface HoleState {
 
 const TAP_IN_DISTANCE = 0.4; // metres
 
-export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId }: PuttEntryProps) {
+export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId, isEditingRound }: PuttEntryProps) {
   const [hasRestoredFromStorage, setHasRestoredFromStorage] = useState(false);
   const [pinPosition, setPinPosition] = useState<Position>({ x: 50, y: 50 });
   const [ballPosition, setBallPosition] = useState<Position | null>(null);
@@ -1054,13 +1055,15 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     // Collect all pending putts from all holes
     const allPendingPutts = [...pendingPutts];
 
-    // Save round to local history (last 10 rounds) BEFORE notifying parent
-    if (allPendingPutts.length > 0) {
+    // Only save to RoundHistory if NOT editing (prevents duplicates when editing)
+    if (allPendingPutts.length > 0 && !isEditingRound) {
       const activeRoundForHistory = ActiveRoundStorage.loadActiveRound();
       RoundHistory.saveRound(allPendingPutts, activeRoundForHistory?.courseName || NEANGAR_PARK.name);
     }
 
-    // Notify parent that round is complete (after saving to history)
+    // Notify parent that round is complete
+    // When editing, parent will intercept this and show confirmation dialog
+    // When creating new round, parent will show round summary
     if (onRoundComplete) {
       const activeRound = ActiveRoundStorage.loadActiveRound();
       onRoundComplete({
