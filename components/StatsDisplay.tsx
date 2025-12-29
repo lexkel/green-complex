@@ -238,14 +238,26 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
                 strokeLinejoin="round"
               />
               {/* Last point */}
-              <circle
-                cx={(last10Rounds.length - 1) * (500 / (last10Rounds.length - 1))}
-                cy={200 - ((last10Rounds[last10Rounds.length - 1].avgPutts - Math.min(...last10Rounds.map(r => r.avgPutts)) + 0.5) / (Math.max(...last10Rounds.map(r => r.avgPutts)) - Math.min(...last10Rounds.map(r => r.avgPutts)) + 1)) * 160}
-                r="6"
-                fill="white"
-                stroke="#4ade80"
-                strokeWidth="2"
-              />
+              {last10Rounds.length > 1 && (
+                <circle
+                  cx={(last10Rounds.length - 1) * (500 / (last10Rounds.length - 1))}
+                  cy={200 - ((last10Rounds[last10Rounds.length - 1].avgPutts - Math.min(...last10Rounds.map(r => r.avgPutts)) + 0.5) / (Math.max(...last10Rounds.map(r => r.avgPutts)) - Math.min(...last10Rounds.map(r => r.avgPutts)) + 1)) * 160}
+                  r="6"
+                  fill="white"
+                  stroke="#4ade80"
+                  strokeWidth="2"
+                />
+              )}
+              {last10Rounds.length === 1 && (
+                <circle
+                  cx={250}
+                  cy={100}
+                  r="6"
+                  fill="white"
+                  stroke="#4ade80"
+                  strokeWidth="2"
+                />
+              )}
             </svg>
           </div>
         </div>

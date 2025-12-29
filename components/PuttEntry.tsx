@@ -255,6 +255,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   const [isPinching, setIsPinching] = useState(false);
   const initialPinchDistance = useRef<number>(0);
   const initialZoom = useRef<number>(canvasZoom);
+  const pinchCenter = useRef<Position>({ x: 0, y: 0 }); // Center point of pinch in screen coords
+  const pinchCenterViewBox = useRef<Position>({ x: 0, y: 0 }); // Center point in viewBox coords
   const incrementInterval = useRef<NodeJS.Timeout | null>(null);
   const decrementInterval = useRef<NodeJS.Timeout | null>(null);
   const [viewBoxOffset, setViewBoxOffset] = useState<Position>({ x: 0, y: 0 });
@@ -376,6 +378,21 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       );
       initialPinchDistance.current = distance;
       initialZoom.current = canvasZoom;
+
+      // Calculate pinch center in screen coordinates
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+      pinchCenter.current = { x: centerX, y: centerY };
+
+      // Convert pinch center to viewBox coordinates
+      const rect = svg.getBoundingClientRect();
+      const svgX = ((centerX - rect.left) / rect.width) * 100;
+      const svgY = ((centerY - rect.top) / rect.height) * 100;
+      pinchCenterViewBox.current = {
+        x: svgX + viewBoxOffset.x,
+        y: svgY + viewBoxOffset.y
+      };
+
       e.preventDefault();
     } else if (e.touches.length === 1) {
       // Single touch - start potential pan
@@ -403,7 +420,23 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
       const scale = distance / initialPinchDistance.current;
       const newZoom = Math.max(0.5, Math.min(4, initialZoom.current / scale));
+
+      // Calculate new viewBox offset to keep pinch center stable
+      // The pinch center should remain at the same position in viewBox coordinates
+      const rect = svg.getBoundingClientRect();
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+      const svgX = ((centerX - rect.left) / rect.width) * 100;
+      const svgY = ((centerY - rect.top) / rect.height) * 100;
+
+      // Adjust offset so pinchCenterViewBox maps to the current screen position
+      const newOffset = {
+        x: pinchCenterViewBox.current.x - svgX,
+        y: pinchCenterViewBox.current.y - svgY
+      };
+
       setCanvasZoom(newZoom);
+      setViewBoxOffset(newOffset);
       e.preventDefault();
     } else if (e.touches.length === 1 && !isPinching) {
       // Single finger pan - check if moved enough to be a pan

@@ -61,6 +61,13 @@ export class GreenComplexDB extends Dexie {
       holes: 'id, roundId, holeNumber',
       putts: 'id, holeId, roundId, userId, made, updatedAt, dirty',
     });
+
+    // Version 2: Add syncedAt index for sync queries
+    this.version(2).stores({
+      rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt',
+      holes: 'id, roundId, holeNumber',
+      putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt',
+    });
   }
 }
 

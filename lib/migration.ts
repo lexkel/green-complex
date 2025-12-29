@@ -28,13 +28,18 @@ export class DataMigration {
       }
 
       // Migrate each round, preserving original timestamps
+      // Generate new UUIDs for old round_ IDs
       for (const round of existingRounds) {
+        // Only use the old ID if it's already a valid UUID, otherwise generate a new one
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(round.id);
+        const roundId = isValidUUID ? round.id : crypto.randomUUID();
+
         await DataAccess.saveRound(round.course, round.putts, {
-          roundId: round.id,
+          roundId,
           createdAt: round.timestamp,
           updatedAt: round.timestamp,
         });
-        console.log('[Migration] Migrated round:', round.id);
+        console.log('[Migration] Migrated round:', round.id, '→', roundId);
       }
 
       // Mark migration complete

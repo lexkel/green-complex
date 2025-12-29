@@ -14,6 +14,7 @@ import { Save, Trash2 } from 'lucide-react';
 import { COURSES, CourseData, HoleData } from '@/data/courses';
 import { UserIdentity } from '@/lib/userIdentity';
 import { DataMigration } from '@/lib/migration';
+import { SyncService, SyncStatus } from '@/lib/sync';
 
 // Sample data for demo mode
 const DEMO_PUTTS: PuttingAttempt[] = [
@@ -63,6 +64,11 @@ export default function Home() {
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   const [courseEditMode, setCourseEditMode] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('neangar-park');
+  const [recoveryCode, setRecoveryCode] = useState<string>('');
+  const [showRecoveryCode, setShowRecoveryCode] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importCode, setImportCode] = useState('');
   const hasInitializedRef = useRef(false);
   const migrationCompleteRef = useRef(false);
 
@@ -78,6 +84,11 @@ export default function Home() {
         await DataMigration.migrateFromLocalStorage();
         migrationCompleteRef.current = true;
         console.log('[App] Data migration complete');
+
+        // Start automatic sync after migration
+        if (navigator.onLine) {
+          SyncService.startAutoSync(30000); // Sync every 30 seconds
+        }
       } catch (error) {
         console.error('[App] Migration failed:', error);
       }
@@ -103,6 +114,14 @@ export default function Home() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Load recovery code and sync status when on settings tab
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      setRecoveryCode(UserIdentity.getRecoveryCode());
+      SyncService.getSyncStatus().then(setSyncStatus);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     console.log('[PAGE] Auth useEffect triggered - isAuthenticated:', isAuthenticated, 'accessToken:', accessToken, 'hasInitialized:', hasInitializedRef.current);
@@ -362,7 +381,12 @@ export default function Home() {
       setSaveRoundFn(null);
       setGetRoundDataFn(null);
       // Reload recent rounds after saving
-      RoundHistory.getRounds().then(setRecentRounds);
+      RoundHistory.getRounds().then(rounds => {
+        setRecentRounds(rounds);
+        // Also reload putts for stats
+        const allPutts = rounds.flatMap(round => round.putts);
+        setPutts(allPutts);
+      });
 
       // Show the round summary
       console.log('[HANDLE END ROUND] Setting showRoundSummary to true');
@@ -386,7 +410,12 @@ export default function Home() {
     setGetRoundDataFn(null);
 
     // Reload recent rounds after saving
-    RoundHistory.getRounds().then(setRecentRounds);
+    RoundHistory.getRounds().then(rounds => {
+      setRecentRounds(rounds);
+      // Also reload putts for stats
+      const allPutts = rounds.flatMap(round => round.putts);
+      setPutts(allPutts);
+    });
 
     // Show the round summary
     console.log('[HANDLE ROUND COMPLETE] Setting showRoundSummary to true');
@@ -556,7 +585,7 @@ export default function Home() {
 
     // Create ActiveRoundData structure
     const activeRoundData = {
-      id: savedRoundData?.roundId || `round_${Date.now()}`,
+      id: savedRoundData?.roundId || crypto.randomUUID(),
       courseId: courseName.toLowerCase().replace(/\s+/g, '_'),
       courseName: courseName,
       startTimestamp: startTimestamp,
@@ -1547,6 +1576,176 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Data & Sync Section */}
+            <div>
+              <div style={{
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                color: '#888',
+                letterSpacing: '0.05em',
+                marginBottom: '0.75rem',
+                paddingLeft: '0.5rem'
+              }}>
+                BACKUP & SYNC
+              </div>
+
+              <div style={{
+                backgroundColor: '#1a1a1a',
+                borderRadius: '12px',
+                border: '1px solid #2a2a2a',
+                overflow: 'hidden'
+              }}>
+                {/* Recovery Code */}
+                <div style={{
+                  padding: '1rem',
+                  borderBottom: '1px solid #2a2a2a'
+                }}>
+                  <div style={{
+                    fontSize: '1rem',
+                    color: '#fff',
+                    marginBottom: '0.5rem',
+                    fontWeight: '500'
+                  }}>
+                    Recovery Code
+                  </div>
+                  <div style={{
+                    fontSize: '0.875rem',
+                    color: '#888',
+                    marginBottom: '0.75rem'
+                  }}>
+                    Save this code to access your data on other devices
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    alignItems: 'center',
+                  }}>
+                    <input
+                      type={showRecoveryCode ? 'text' : 'password'}
+                      value={recoveryCode}
+                      readOnly
+                      style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        fontSize: '0.8rem',
+                        fontFamily: 'monospace',
+                        backgroundColor: '#0a0a0a',
+                        color: '#fff',
+                        border: '1px solid #2a2a2a',
+                        borderRadius: '8px',
+                      }}
+                    />
+                    <button
+                      onClick={() => setShowRecoveryCode(!showRecoveryCode)}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        backgroundColor: '#2a2a2a',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {showRecoveryCode ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(recoveryCode);
+                        alert('Recovery code copied to clipboard!');
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        backgroundColor: '#1a7a52',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    style={{
+                      marginTop: '0.75rem',
+                      padding: '0.75rem 1rem',
+                      backgroundColor: 'transparent',
+                      color: '#ef4444',
+                      border: '1px solid #ef4444',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      width: '100%',
+                      fontSize: '0.875rem',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Import Recovery Code
+                  </button>
+                </div>
+
+                {/* Sync Status */}
+                {syncStatus && (
+                  <div style={{
+                    padding: '1rem'
+                  }}>
+                    <div style={{
+                      fontSize: '1rem',
+                      color: '#fff',
+                      marginBottom: '0.5rem',
+                      fontWeight: '500'
+                    }}>
+                      Sync Status
+                    </div>
+                    <div style={{
+                      padding: '0.75rem',
+                      backgroundColor: '#0a0a0a',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      marginBottom: '0.75rem'
+                    }}>
+                      <div style={{ color: '#888', marginBottom: '0.5rem' }}>
+                        Last synced: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Never'}
+                      </div>
+                      <div style={{ color: '#888', marginBottom: '0.5rem' }}>
+                        Pending changes: {syncStatus.pendingChanges}
+                      </div>
+                      <div style={{ color: '#888' }}>
+                        Status: {syncStatus.isSyncing ? 'Syncing...' : 'Idle'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await SyncService.sync();
+                        const status = await SyncService.getSyncStatus();
+                        setSyncStatus(status);
+                        alert('Sync complete!');
+                      }}
+                      disabled={syncStatus.isSyncing}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        backgroundColor: syncStatus.isSyncing ? '#2a2a2a' : '#1a7a52',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: syncStatus.isSyncing ? 'not-allowed' : 'pointer',
+                        width: '100%',
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        opacity: syncStatus.isSyncing ? 0.5 : 1
+                      }}
+                    >
+                      {syncStatus.isSyncing ? 'Syncing...' : 'Sync Now'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Sign Out Button */}
             <button
               onClick={() => {
@@ -1722,6 +1921,105 @@ export default function Home() {
                 style={{ width: '100%', background: 'transparent', border: '1px solid var(--color-border)' }}
               >
                 Continue Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Recovery Code Modal */}
+      {showImportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--spacing-xl)',
+            maxWidth: '500px',
+            width: '90%',
+          }}>
+            <h3 style={{
+              marginBottom: 'var(--spacing-md)',
+              color: '#ef4444',
+              fontSize: '1.25rem',
+              fontWeight: '600'
+            }}>
+              Warning: Import Recovery Code
+            </h3>
+            <p style={{
+              marginBottom: 'var(--spacing-lg)',
+              color: 'var(--color-text-secondary)',
+              lineHeight: '1.5'
+            }}>
+              Importing a recovery code will <strong style={{ color: '#ef4444' }}>REPLACE all local data</strong> with data from the cloud for that user ID.
+              This action cannot be undone. Make sure you have the correct recovery code.
+            </p>
+            <input
+              type="text"
+              value={importCode}
+              onChange={(e) => setImportCode(e.target.value)}
+              placeholder="Paste recovery code here"
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                fontSize: '0.9rem',
+                fontFamily: 'monospace',
+                backgroundColor: '#0a0a0a',
+                color: '#fff',
+                border: '1px solid #2a2a2a',
+                borderRadius: '8px',
+                marginBottom: 'var(--spacing-lg)',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportCode('');
+                }}
+                className="auth-button logout-button"
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!importCode.trim()) {
+                    alert('Please enter a recovery code');
+                    return;
+                  }
+
+                  // Clear local database
+                  await RoundHistory.clearAll();
+
+                  // Import recovery code
+                  UserIdentity.importRecoveryCode(importCode);
+
+                  // Force sync down from cloud
+                  await SyncService.syncDown();
+
+                  // Reload app
+                  window.location.reload();
+                }}
+                className="submit-button"
+                style={{
+                  flex: 1,
+                  background: '#ef4444',
+                  fontWeight: '600'
+                }}
+              >
+                Import & Replace Local Data
               </button>
             </div>
           </div>
