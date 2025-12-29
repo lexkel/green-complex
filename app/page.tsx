@@ -664,9 +664,11 @@ export default function Home() {
     // Get current round data
     const currentData = getRoundDataFn();
 
-    // Delete the old round and save the updated one
-    await RoundHistory.deleteRound(savedRoundData.roundId);
-    await RoundHistory.saveRound(currentData.putts, savedRoundData.courseName);
+    // Update the existing round (keeps same ID, no duplication)
+    await RoundHistory.updateRound(savedRoundData.roundId, {
+      putts: currentData.putts,
+      course: savedRoundData.courseName,
+    });
 
     // Update savedRoundData with new putts
     setSavedRoundData({

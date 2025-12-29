@@ -161,6 +161,100 @@ export class DataAccess {
   }
 
   /**
+   * Update an existing round with new putts data
+   * This replaces all holes and putts while keeping the same round ID
+   */
+  static async updateRound(
+    roundId: string,
+    putts: PuttingAttempt[],
+    options?: {
+      course?: string;
+      date?: string;
+    }
+  ): Promise<void> {
+    const { id: userId } = UserIdentity.getUserId();
+    const now = new Date().toISOString();
+
+    // Get existing round to preserve createdAt
+    const existingRound = await db.rounds.get(roundId);
+    if (!existingRound) {
+      throw new Error('Round not found');
+    }
+
+    // Group putts by hole
+    const puttsByHole = new Map<number, PuttingAttempt[]>();
+    putts.forEach(p => {
+      if (!p.holeNumber) return;
+      if (!puttsByHole.has(p.holeNumber)) {
+        puttsByHole.set(p.holeNumber, []);
+      }
+      puttsByHole.get(p.holeNumber)!.push(p);
+    });
+
+    const holesPlayed = puttsByHole.size;
+
+    await db.transaction('rw', db.rounds, db.holes, db.putts, async () => {
+      // Delete old holes and putts
+      const oldHoles = await db.holes.where('roundId').equals(roundId).toArray();
+      const oldHoleIds = oldHoles.map(h => h.id);
+      await db.putts.where('holeId').anyOf(oldHoleIds).delete();
+      await db.holes.where('roundId').equals(roundId).delete();
+
+      // Update round metadata
+      await db.rounds.update(roundId, {
+        course: options?.course || existingRound.course,
+        date: options?.date || existingRound.date,
+        holesPlayed,
+        totalPutts: putts.length,
+        updatedAt: now,
+        dirty: true, // Mark as dirty for sync
+      });
+
+      // Create new holes and putts
+      const holes: Hole[] = [];
+      const puttRecords: Putt[] = [];
+
+      puttsByHole.forEach((holePutts, holeNumber) => {
+        const holeId = crypto.randomUUID();
+        const par = 4; // TODO: Get from course data
+
+        holes.push({
+          id: holeId,
+          roundId,
+          holeNumber,
+          par,
+          createdAt: existingRound.createdAt,
+          updatedAt: now,
+        });
+
+        holePutts.forEach((putt, idx) => {
+          puttRecords.push({
+            id: crypto.randomUUID(),
+            holeId,
+            roundId,
+            userId,
+            puttNumber: putt.puttNumber || idx + 1,
+            distance: putt.distance,
+            made: putt.made,
+            endProximityHorizontal: putt.proximity?.horizontal,
+            endProximityVertical: putt.proximity?.vertical,
+            startProximityHorizontal: putt.startProximity?.horizontal,
+            startProximityVertical: putt.startProximity?.vertical,
+            pinPositionX: putt.pinPosition?.x,
+            pinPositionY: putt.pinPosition?.y,
+            createdAt: existingRound.createdAt,
+            updatedAt: now,
+            dirty: true,
+          });
+        });
+      });
+
+      await db.holes.bulkAdd(holes);
+      await db.putts.bulkAdd(puttRecords);
+    });
+  }
+
+  /**
    * Get total database size (for settings display)
    */
   static async getDatabaseSize(): Promise<number> {

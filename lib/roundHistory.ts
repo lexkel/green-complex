@@ -82,13 +82,25 @@ export class RoundHistory {
   }
 
   // NEW: Async version using IndexedDB
-  static async updateRound(id: string, updates: Partial<Pick<SavedRound, 'course' | 'timestamp'>>): Promise<void> {
-    await db.rounds.update(id, {
-      ...(updates.course && { course: updates.course }),
-      ...(updates.timestamp && { date: updates.timestamp }),
-      updatedAt: new Date().toISOString(),
-      dirty: true,
-    });
+  static async updateRound(
+    id: string,
+    updates: Partial<Pick<SavedRound, 'course' | 'timestamp' | 'putts'>>
+  ): Promise<void> {
+    // If updating putts, use DataAccess.updateRound for full round update
+    if (updates.putts) {
+      await DataAccess.updateRound(id, updates.putts, {
+        course: updates.course,
+        date: updates.timestamp,
+      });
+    } else {
+      // Otherwise just update metadata
+      await db.rounds.update(id, {
+        ...(updates.course && { course: updates.course }),
+        ...(updates.timestamp && { date: updates.timestamp }),
+        updatedAt: new Date().toISOString(),
+        dirty: true,
+      });
+    }
   }
 
   // NEW: Async version using IndexedDB
