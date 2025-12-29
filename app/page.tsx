@@ -412,6 +412,21 @@ export default function Home() {
 
   const handleRoundComplete = (roundData: {putts: PuttingAttempt[], courseName: string, startTimestamp: string}) => {
     console.log('[HANDLE ROUND COMPLETE] Round completed from PuttEntry:', roundData);
+
+    // If we're showing the edit exit confirmation, don't complete the round
+    // The user is trying to exit edit mode, not finish the round
+    if (showEditExitConfirmation) {
+      console.log('[HANDLE ROUND COMPLETE] Edit exit confirmation is showing, ignoring round complete');
+      return;
+    }
+
+    // If we're in edit mode, don't auto-complete - user should explicitly save
+    if (editingRoundId) {
+      console.log('[HANDLE ROUND COMPLETE] In edit mode, showing confirmation instead');
+      setShowEditExitConfirmation(true);
+      return;
+    }
+
     // Store the round data for the summary screen
     setSavedRoundData({
       putts: roundData.putts,
@@ -678,8 +693,13 @@ export default function Home() {
   };
 
   const handleNavigationAttempt = (targetTab: 'home' | 'entry' | 'stats') => {
+    console.log('[NAV] Navigation attempt to:', targetTab);
+    console.log('[NAV] editingRoundId:', editingRoundId);
+    console.log('[NAV] getRoundDataFn:', getRoundDataFn ? 'exists' : 'NULL');
+
     // If not editing, allow navigation
     if (!editingRoundId) {
+      console.log('[NAV] Not editing, navigating directly');
       setActiveTab(targetTab);
       return;
     }
@@ -693,17 +713,25 @@ export default function Home() {
     }
 
     try {
+      console.log('[NAV] About to call getRoundDataFn...');
       const currentData = getRoundDataFn();
+      console.log('[NAV] Got current data:', currentData);
+
       const currentPutts = currentData.putts;
+      console.log('[NAV] Current putts count:', currentPutts?.length);
+      console.log('[NAV] Original putts count:', originalRoundPutts?.length);
 
       const hasChanges = originalRoundPutts &&
         JSON.stringify(currentPutts) !== JSON.stringify(originalRoundPutts);
+      console.log('[NAV] Has changes?', hasChanges);
 
       if (hasChanges) {
+        console.log('[NAV] Changes detected, showing confirmation dialog');
         // Store where user wanted to go and show confirmation
         setPendingNavigation(targetTab);
         setShowEditExitConfirmation(true);
       } else {
+        console.log('[NAV] No changes detected, exiting without confirmation');
         // No changes - exit edit mode WITHOUT showing summary, then navigate
         exitEditModeWithoutSaving(false);
         setActiveTab(targetTab);
@@ -741,7 +769,13 @@ export default function Home() {
   };
 
   const saveEditedRoundAndExit = async () => {
-    if (!getRoundDataFn || !savedRoundData || !savedRoundData.roundId) return;
+    console.log('[SAVE] saveEditedRoundAndExit called');
+    console.log('[SAVE] getRoundDataFn:', getRoundDataFn ? 'exists' : 'NULL');
+    console.log('[SAVE] savedRoundData:', savedRoundData);
+    if (!getRoundDataFn || !savedRoundData || !savedRoundData.roundId) {
+      console.error('[SAVE] Missing required data, returning');
+      return;
+    }
 
     // Get current round data
     const currentData = getRoundDataFn();
@@ -992,23 +1026,98 @@ export default function Home() {
   if (showRoundSummary && savedRoundData) {
     console.log('[RENDER] Showing RoundSummary component');
     return (
-      <div className="app-container">
-        <RoundSummary
-          putts={savedRoundData.putts}
-          courseName={savedRoundData.courseName}
-          date={savedRoundData.date}
-          isHistorical={isViewingHistoricalRound}
-          onEditMetadata={handleEditRoundMetadata}
-          onEditHole={handleEditHole}
-          onDone={() => {
-            console.log('[ROUND SUMMARY] Done button clicked');
-            setShowRoundSummary(false);
-            setSavedRoundData(null);
-            setIsViewingHistoricalRound(false);
-            setActiveTab('home');
-          }}
-        />
-      </div>
+      <>
+        <div className="app-container">
+          <RoundSummary
+            putts={savedRoundData.putts}
+            courseName={savedRoundData.courseName}
+            date={savedRoundData.date}
+            isHistorical={isViewingHistoricalRound}
+            onEditMetadata={handleEditRoundMetadata}
+            onEditHole={handleEditHole}
+            onDone={() => {
+              console.log('[ROUND SUMMARY] Done button clicked');
+              setShowRoundSummary(false);
+              setSavedRoundData(null);
+              setIsViewingHistoricalRound(false);
+              setActiveTab('home');
+            }}
+          />
+        </div>
+
+        {/* Edit Exit Confirmation Dialog - must render even in early returns */}
+        {showEditExitConfirmation && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}>
+            <div style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--spacing-xl)',
+              maxWidth: '400px',
+              width: '90%',
+            }}>
+              <h3 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--color-text)' }}>
+                Save Changes?
+              </h3>
+              <p style={{ marginBottom: 'var(--spacing-lg)', color: 'var(--color-text-secondary)' }}>
+                You have made changes to this round. Would you like to save them?
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                <button
+                  onClick={async () => {
+                    await saveEditedRoundAndExit();
+                    if (pendingNavigation && pendingNavigation !== 'entry') {
+                      setShowRoundSummary(false);
+                      setActiveTab(pendingNavigation);
+                      setPendingNavigation(null);
+                    }
+                  }}
+                  className="submit-button"
+                  style={{ width: '100%' }}
+                >
+                  Save Changes
+                </button>
+                <button
+                  onClick={() => {
+                    exitEditModeWithoutSaving(false);
+                    if (pendingNavigation) {
+                      setActiveTab(pendingNavigation);
+                      setPendingNavigation(null);
+                    } else {
+                      setActiveTab('home');
+                    }
+                  }}
+                  className="auth-button logout-button"
+                  style={{ width: '100%' }}
+                >
+                  Discard Changes
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditExitConfirmation(false);
+                    setPendingNavigation(null);
+                  }}
+                  className="auth-button"
+                  style={{ width: '100%', background: 'transparent', border: '1px solid var(--color-border)' }}
+                >
+                  Continue Editing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -1070,43 +1179,118 @@ export default function Home() {
   // Show green view if entry tab is selected (always show when on entry tab)
   if (activeTab === 'entry') {
     return (
-      <div className="app-container">
-        <div className="stats-view">
-          {/* <div className="stats-header">
-            <button className="back-button" onClick={() => setActiveTab('home')}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <h1>Green</h1>
-            {editingRoundId ? (
-              <button
-                className="back-button"
-                onClick={handleExitEditMode}
-                style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
-              >
-                Return
+      <>
+        <div className="app-container">
+          <div className="stats-view">
+            {/* <div className="stats-header">
+              <button className="back-button" onClick={() => setActiveTab('home')}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </button>
-            ) : (
-              <div style={{ width: '40px' }}></div>
-            )}
-          </div> */}
-          <PuttEntry
-            onAddPutt={handleAddPutt}
-            isOnline={isOnline}
-            onRoundStateChange={handleRoundStateChange}
-            onRoundComplete={handleRoundComplete}
-            resetRound={resetRound}
-            onNavigationAttempt={handleNavigationAttempt}
-            courseId={selectedCourseId}
-            onDiscardRound={() => {
-              setPendingPuttsCount(0);
-              setHolesComplete(0);
-              setActiveTab('home');
-            }}
-          />
+              <h1>Green</h1>
+              {editingRoundId ? (
+                <button
+                  className="back-button"
+                  onClick={handleExitEditMode}
+                  style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+                >
+                  Return
+                </button>
+              ) : (
+                <div style={{ width: '40px' }}></div>
+              )}
+            </div> */}
+            <PuttEntry
+              onAddPutt={handleAddPutt}
+              isOnline={isOnline}
+              onRoundStateChange={handleRoundStateChange}
+              onRoundComplete={handleRoundComplete}
+              resetRound={resetRound}
+              onNavigationAttempt={handleNavigationAttempt}
+              courseId={selectedCourseId}
+              onDiscardRound={() => {
+                setPendingPuttsCount(0);
+                setHolesComplete(0);
+                setActiveTab('home');
+              }}
+            />
+          </div>
         </div>
-      </div>
+
+        {/* Edit Exit Confirmation Dialog - must render even in early returns */}
+        {showEditExitConfirmation && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}>
+            <div style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--spacing-xl)',
+              maxWidth: '400px',
+              width: '90%',
+            }}>
+              <h3 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--color-text)' }}>
+                Save Changes?
+              </h3>
+              <p style={{ marginBottom: 'var(--spacing-lg)', color: 'var(--color-text-secondary)' }}>
+                You have made changes to this round. Would you like to save them?
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                <button
+                  onClick={async () => {
+                    await saveEditedRoundAndExit();
+                    if (pendingNavigation && pendingNavigation !== 'entry') {
+                      setShowRoundSummary(false);
+                      setActiveTab(pendingNavigation);
+                      setPendingNavigation(null);
+                    }
+                  }}
+                  className="submit-button"
+                  style={{ width: '100%' }}
+                >
+                  Save Changes
+                </button>
+                <button
+                  onClick={() => {
+                    exitEditModeWithoutSaving(false);
+                    if (pendingNavigation) {
+                      setActiveTab(pendingNavigation);
+                      setPendingNavigation(null);
+                    } else {
+                      setActiveTab('home');
+                    }
+                  }}
+                  className="auth-button logout-button"
+                  style={{ width: '100%' }}
+                >
+                  Discard Changes
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditExitConfirmation(false);
+                    setPendingNavigation(null);
+                  }}
+                  className="auth-button"
+                  style={{ width: '100%', background: 'transparent', border: '1px solid var(--color-border)' }}
+                >
+                  Continue Editing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 

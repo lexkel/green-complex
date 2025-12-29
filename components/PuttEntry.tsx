@@ -1403,7 +1403,11 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       {/* Compact Header */}
       <div className="compact-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button className="back-button" onClick={() => onNavigationAttempt?.('home')}>
+          <button className="back-button" onClick={() => {
+            console.log('[BACK BUTTON] Clicked in PuttEntry');
+            console.log('[BACK BUTTON] onNavigationAttempt:', onNavigationAttempt);
+            onNavigationAttempt?.('home');
+          }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
