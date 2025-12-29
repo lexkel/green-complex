@@ -639,6 +639,17 @@ export default function Home() {
       holeNumber
     );
 
+    // Set up getRoundDataFn immediately for edit mode (prevents race condition)
+    const getEditRoundData = () => {
+      const activeRound = ActiveRoundStorage.loadActiveRound();
+      return {
+        putts: activeRound?.pendingPutts || [],
+        courseName: activeRound?.courseName || savedRoundData.courseName,
+        startTimestamp: activeRound?.startTimestamp || savedRoundData.date.toISOString()
+      };
+    };
+    setGetRoundDataFn(() => getEditRoundData);
+
     // Close summary and navigate to entry tab
     setShowRoundSummary(false);
     setActiveTab('entry');
@@ -673,8 +684,15 @@ export default function Home() {
       return;
     }
 
-    // If editing, check for changes first
-    if (getRoundDataFn) {
+    // We're in edit mode - need to check for changes
+    if (!getRoundDataFn) {
+      // Shouldn't happen after setting it immediately in handleEditHole, but handle gracefully
+      console.warn('[NAV] getRoundDataFn not ready, blocking navigation');
+      alert('Please wait for the round to load before navigating.');
+      return;
+    }
+
+    try {
       const currentData = getRoundDataFn();
       const currentPutts = currentData.putts;
 
@@ -682,23 +700,23 @@ export default function Home() {
         JSON.stringify(currentPutts) !== JSON.stringify(originalRoundPutts);
 
       if (hasChanges) {
-        // Store where user wanted to go
+        // Store where user wanted to go and show confirmation
         setPendingNavigation(targetTab);
-        // Show confirmation dialog
         setShowEditExitConfirmation(true);
       } else {
-        // No changes, allow navigation
-        exitEditModeWithoutSaving();
+        // No changes - exit edit mode WITHOUT showing summary, then navigate
+        exitEditModeWithoutSaving(false);
         setActiveTab(targetTab);
       }
-    } else {
-      // No getRoundDataFn, just exit
-      exitEditModeWithoutSaving();
-      setActiveTab(targetTab);
+    } catch (error) {
+      console.error('[NAV] Error checking changes:', error);
+      // On error, show confirmation to be safe
+      setPendingNavigation(targetTab);
+      setShowEditExitConfirmation(true);
     }
   };
 
-  const exitEditModeWithoutSaving = () => {
+  const exitEditModeWithoutSaving = (showSummary: boolean = true) => {
     // Restore original data
     if (savedRoundData && originalRoundPutts && savedRoundData.roundId) {
       setSavedRoundData({
@@ -716,8 +734,10 @@ export default function Home() {
     setShowEditExitConfirmation(false);
     setPendingNavigation(null);
 
-    // Return to round summary
-    setShowRoundSummary(true);
+    // Only show round summary if requested
+    if (showSummary) {
+      setShowRoundSummary(true);
+    }
   };
 
   const saveEditedRoundAndExit = async () => {
@@ -1975,7 +1995,9 @@ export default function Home() {
               <button
                 onClick={async () => {
                   await saveEditedRoundAndExit();
-                  if (pendingNavigation) {
+                  // After saving, navigate if user wanted to go elsewhere
+                  if (pendingNavigation && pendingNavigation !== 'entry') {
+                    setShowRoundSummary(false);
                     setActiveTab(pendingNavigation);
                     setPendingNavigation(null);
                   }
@@ -1987,10 +2009,12 @@ export default function Home() {
               </button>
               <button
                 onClick={() => {
-                  exitEditModeWithoutSaving();
+                  exitEditModeWithoutSaving(false);  // Don't show summary
                   if (pendingNavigation) {
                     setActiveTab(pendingNavigation);
                     setPendingNavigation(null);
+                  } else {
+                    setActiveTab('home');
                   }
                 }}
                 className="auth-button logout-button"
