@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Flag, Trash2 } from 'lucide-react';
+import { Flag, Trash2, ChevronRight } from 'lucide-react';
 import { PuttingAttempt } from '@/types';
 import { NEANGAR_PARK, COURSES, getHoleData, GreenShape, HoleData, CourseData } from '@/data/courses';
 import { RoundHistory } from '@/lib/roundHistory';
@@ -42,7 +42,6 @@ interface HoleState {
   pendingPutts: PuttingAttempt[]; // Putts waiting to be saved to Google Sheets
 }
 
-const TAP_IN_DISTANCE = 0.4; // metres
 
 export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId, isEditingRound }: PuttEntryProps) {
   const [hasRestoredFromStorage, setHasRestoredFromStorage] = useState(false);
@@ -68,6 +67,12 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
   // Hole selector modal
   const [showHoleSelector, setShowHoleSelector] = useState(false);
+
+  // End round confirmation modal
+  const [showEndRoundConfirm, setShowEndRoundConfirm] = useState(false);
+
+  // Discard round confirmation modal
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Custom courses from IndexedDB
   const [customCourses, setCustomCourses] = useState<CourseData[]>([]);
@@ -272,6 +277,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
   const [holeComplete, setHoleComplete] = useState(false);
   const [distanceInputValue, setDistanceInputValue] = useState<string>('_._');
+  const [isEditingDistance, setIsEditingDistance] = useState(false);
+  const [isAdjusting, setIsAdjusting] = useState(false);
   const [puttStartProximity, setPuttStartProximity] = useState<any>(null);
   const [puttStartDistance, setPuttStartDistance] = useState<number>(0);
   const [waitingForEndPosition, setWaitingForEndPosition] = useState(false);
@@ -838,6 +845,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     }
   };
 
+
   const formatProximityDescription = (proximity: any): string => {
     if (!proximity) return '';
 
@@ -1163,6 +1171,17 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     setHoleStates(newHoleStates);
   };
 
+  const handleContinueToNextHole = () => {
+    // Simple handler: save current hole and go to next hole
+    // Used by the secondary continue button on hole 18
+    saveCurrentHoleState();
+
+    // Go to next hole, wrapping from 18 to 1
+    const nextHole = hole === 18 ? 1 : hole + 1;
+    setHole(nextHole);
+    restoreHoleState(nextHole);
+  };
+
   const handleNextHole = () => {
     // Check if we're finishing hole 18
     if (hole === 18 && holeComplete) {
@@ -1240,39 +1259,75 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   };
 
   const startIncrement = () => {
-    moveBallToDistance(Math.min(50, distance + 0.1));
-    incrementInterval.current = setInterval(() => {
-      setDistance((prev: number) => {
-        const newDist = Math.min(50, prev + 0.1);
-        moveBallToDistance(newDist);
-        return newDist;
-      });
-    }, 100);
+    if (isAdjusting) return; // Prevent double-firing
+    setIsAdjusting(true);
+
+    // If editing distance, exit edit mode first
+    if (isEditingDistance) {
+      setIsEditingDistance(false);
+    }
+
+    // Single increment on press
+    const newDist = Math.min(50, distance + 0.1);
+    moveBallToDistance(newDist);
+    setDistanceInputValue(newDist.toFixed(1));
+
+    // Delay before continuous increment starts (prevents accidental double-tap)
+    incrementInterval.current = setTimeout(() => {
+      incrementInterval.current = setInterval(() => {
+        setDistance((prev: number) => {
+          const newDist = Math.min(50, prev + 0.1);
+          moveBallToDistance(newDist);
+          setDistanceInputValue(newDist.toFixed(1));
+          return newDist;
+        });
+      }, 150) as any; // Slower interval for better control
+    }, 300) as any; // 300ms delay before continuous increment
   };
 
   const startDecrement = () => {
-    moveBallToDistance(Math.max(0.1, distance - 0.1));
-    decrementInterval.current = setInterval(() => {
-      setDistance((prev: number) => {
-        const newDist = Math.max(0.1, prev - 0.1);
-        moveBallToDistance(newDist);
-        return newDist;
-      });
-    }, 100);
+    if (isAdjusting) return; // Prevent double-firing
+    setIsAdjusting(true);
+
+    // If editing distance, exit edit mode first
+    if (isEditingDistance) {
+      setIsEditingDistance(false);
+    }
+
+    // Single decrement on press
+    const newDist = Math.max(0.1, distance - 0.1);
+    moveBallToDistance(newDist);
+    setDistanceInputValue(newDist.toFixed(1));
+
+    // Delay before continuous decrement starts
+    decrementInterval.current = setTimeout(() => {
+      decrementInterval.current = setInterval(() => {
+        setDistance((prev: number) => {
+          const newDist = Math.max(0.1, prev - 0.1);
+          moveBallToDistance(newDist);
+          setDistanceInputValue(newDist.toFixed(1));
+          return newDist;
+        });
+      }, 150) as any;
+    }, 300) as any;
   };
 
   const stopIncrement = () => {
     if (incrementInterval.current) {
       clearInterval(incrementInterval.current);
+      clearTimeout(incrementInterval.current); // Also clear timeout if still waiting
       incrementInterval.current = null;
     }
+    setIsAdjusting(false);
   };
 
   const stopDecrement = () => {
     if (decrementInterval.current) {
       clearInterval(decrementInterval.current);
+      clearTimeout(decrementInterval.current); // Also clear timeout if still waiting
       decrementInterval.current = null;
     }
+    setIsAdjusting(false);
   };
 
   // Render green shape based on type
@@ -1442,17 +1497,11 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         <div className="hole-navigation-header">
           <button
             className="hole-nav-btn-header"
-            onClick={handlePreviousHole}
-            disabled={hole <= 1}
+            style={{gap: '0.5rem'}}
+            onClick={() => setShowEndRoundConfirm(true)}
           >
-            Previous
-          </button>
-          <button
-            className="hole-nav-btn-header"
-            onClick={handleNextHole}
-            disabled={!holeComplete && hole >= 18}
-          >
-            {hole === 18 && holeComplete ? 'End Round' : 'Next'}
+            <Flag size={18} />
+            <span style={{color:'#fff'}}>End Round</span>
           </button>
         </div>
       </div>
@@ -1502,6 +1551,67 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             ) : null}
           </div>
 
+          {/* Large Next Button - positioned right side, vertically centered */}
+          {(() => {
+            // Calculate which holes have been completed
+            const completedHolesSet = new Set(
+              Array.from(holeStates.values())
+                .filter(state => state.holeComplete)
+                .map(state => state.hole)
+            );
+            // Add current hole if it's complete
+            if (holeComplete) {
+              completedHolesSet.add(hole);
+            }
+
+            // Check if all 18 holes are complete
+            const allHolesComplete = completedHolesSet.size === 18;
+
+            // On hole 18 (regardless of completion): show dual buttons if not all holes complete
+            if (hole === 18 && !allHolesComplete) {
+              return (
+                <>
+                  {/* Smaller Continue button (chevron) - positioned above */}
+                  <button
+                    className="canvas-next-btn-secondary"
+                    onClick={handleContinueToNextHole}
+                    aria-label="Continue to next hole"
+                  >
+                    <ChevronRight size={24} />
+                  </button>
+                  {/* Larger Finish button (flag) - primary position */}
+                  <button
+                    className="canvas-next-btn-primary"
+                    onClick={() => setShowEndRoundConfirm(true)}
+                    aria-label="Finish Round"
+                  >
+                    <Flag size={32} />
+                  </button>
+                </>
+              );
+            }
+
+            // For all other cases: only show button if hole is complete
+            if (!holeComplete) {
+              return null;
+            }
+
+            // Show single button - flag if all holes complete, chevron otherwise
+            return (
+              <button
+                className="canvas-next-btn"
+                onClick={allHolesComplete ? () => setShowEndRoundConfirm(true) : handleNextHole}
+                aria-label={allHolesComplete ? 'Finish Round' : 'Next Hole'}
+              >
+                {allHolesComplete ? (
+                  <Flag size={32} />
+                ) : (
+                  <ChevronRight size={32} />
+                )}
+              </button>
+            );
+          })()}
+
           {/* Desktop Zoom Controls - positioned top-right */}
           <div className="canvas-zoom-controls-overlay">
             <button
@@ -1524,12 +1634,17 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             ref={greenRef}
             className="green-svg-compact"
             viewBox={`${viewBoxOffset.x} ${viewBoxOffset.y} 100 100`}
-            onClick={handleGreenClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseLeave}
-            style={{ cursor: holeComplete ? 'not-allowed' : (isAdjustingPin ? 'crosshair' : (isMousePanning ? 'grabbing' : 'pointer')) }}
+            onClick={isEditingDistance ? undefined : handleGreenClick}
+            onMouseDown={isEditingDistance ? undefined : handleMouseDown}
+            onMouseMove={isEditingDistance ? undefined : handleMouseMove}
+            onMouseUp={isEditingDistance ? undefined : handleMouseUp}
+            onMouseLeave={isEditingDistance ? undefined : handleMouseLeave}
+            style={{
+              cursor: isEditingDistance ? 'default' : (holeComplete ? 'not-allowed' : (isAdjustingPin ? 'crosshair' : (isMousePanning ? 'grabbing' : 'pointer'))),
+              pointerEvents: isEditingDistance ? 'none' : 'auto',
+              opacity: isEditingDistance ? 0.5 : 1,
+              transition: 'opacity 0.2s'
+            }}
           >
             {/* Grid pattern - infinite static background */}
             <defs>
@@ -1650,7 +1765,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         <div className="putt-info-row">
           <span className={holeComplete ? 'putt-label holed' : 'putt-label'}>
             {holeComplete
-              ? 'Holed ✓'
+              ? 'Holed'
               : waitingForEndPosition
                 ? 'Set end position'
                 : isAdjustingPin
@@ -1659,52 +1774,12 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                     ? 'Set start position'
                     : `Putt ${puttNumber}: did you make it?`}
           </span>
-          {!holeComplete && (
-            <div className="distance-display-compact" onClick={() => {
-              const input = document.getElementById('distance-input') as HTMLInputElement;
-              if (input) input.focus();
-            }}>
-              <input
-                id="distance-input"
-                type="text"
-                inputMode="decimal"
-                value={distanceInputValue}
-                onChange={(e) => {
-                  // Just update the input value, don't move the ball
-                  setDistanceInputValue(e.target.value);
-                }}
-                onBlur={(e: any) => {
-                  // Update ball position when user finishes editing
-                  const newDistance = parseFloat(e.target.value);
-                  if (!isNaN(newDistance) && newDistance >= 0.1 && newDistance <= 50) {
-                    moveBallToDistance(newDistance);
-                    setDistanceInputValue(newDistance.toFixed(1));
-                  } else {
-                    // Invalid input, revert to placeholder
-                    setDistanceInputValue('_._');
-                  }
-                }}
-                onFocus={(e: any) => {
-                  // Select all text when focused for easy editing
-                  e.target.select();
-                }}
-                className="distance-value-input"
-              />
-              <span className="distance-unit-compact">m</span>
-            </div>
-          )}
         </div>
 
 
         {/* Distance Controls */}
         {!holeComplete && (
         <div className="distance-controls">
-          <button
-            className={Math.abs(distance - TAP_IN_DISTANCE) < 0.1 ? 'tap-in-btn active' : 'tap-in-btn'}
-            onClick={() => moveBallToDistance(TAP_IN_DISTANCE)}
-          >
-            Tap-in
-          </button>
           <button
             className="distance-adjust-btn"
             onMouseDown={startDecrement}
@@ -1715,16 +1790,72 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
           >
             −
           </button>
-          <div className="distance-slider-group">
+          <div className="distance-display-centered" onClick={() => {
+            const input = document.getElementById('distance-input') as HTMLInputElement;
+            if (input) input.focus();
+          }}>
             <input
-              type="range"
-              min="0.1"
-              max="20"
-              step="0.1"
-              value={Math.min(20, distance)}
-              onChange={(e) => moveBallToDistance(parseFloat(e.target.value))}
-              className="distance-slider"
+              id="distance-input"
+              type="text"
+              inputMode="numeric"
+              value={distanceInputValue}
+              onChange={(e) => {
+                const input = e.target.value;
+
+                // Only allow digits and decimal point
+                const cleaned = input.replace(/[^0-9.]/g, '');
+
+                // Prevent multiple decimal points
+                const parts = cleaned.split('.');
+                if (parts.length > 2) {
+                  return; // Invalid, ignore
+                }
+
+                // Just store the raw input while typing
+                setDistanceInputValue(cleaned);
+              }}
+              onKeyDown={(e) => {
+                // Enter or Tab to save
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+                // Escape to cancel
+                else if (e.key === 'Escape') {
+                  setDistanceInputValue(distance > 0 ? distance.toFixed(1) : '_._');
+                  setIsEditingDistance(false);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              onBlur={(e: any) => {
+                let finalValue = distanceInputValue.trim();
+
+                // If single digit (e.g., "4"), convert to "0.4"
+                if (/^\d$/.test(finalValue)) {
+                  finalValue = `0.${finalValue}`;
+                }
+
+                const newDistance = parseFloat(finalValue);
+                if (!isNaN(newDistance) && newDistance >= 0.1 && newDistance <= 50) {
+                  moveBallToDistance(newDistance);
+                  setDistanceInputValue(newDistance.toFixed(1));
+                } else {
+                  // Invalid input, revert to current distance or placeholder
+                  setDistanceInputValue(distance > 0 ? distance.toFixed(1) : '_._');
+                }
+                setIsEditingDistance(false);
+              }}
+              onFocus={(e: any) => {
+                setIsEditingDistance(true);
+                // Clear the value and set cursor to start
+                setDistanceInputValue('');
+                setTimeout(() => {
+                  e.target.setSelectionRange(0, 0);
+                }, 0);
+              }}
+              className="distance-value-input-large"
             />
+            <span className="distance-unit-large">m</span>
           </div>
           <button
             className="distance-adjust-btn"
@@ -1858,25 +1989,139 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
               }}
               onClick={() => {
                 setShowHoleSelector(false);
-                handleSaveRound();
+                setShowEndRoundConfirm(true);
               }}
             >
               <Flag size={18} />
-              Finish Round
+              End Round
             </button>
             <button
               className="home-round-action-button home-delete-button"
               onClick={() => {
-                if (window.confirm('Are you sure you want to discard this round? All data will be lost.')) {
-                  setShowHoleSelector(false);
-                  handleDiscardRound();
-                  if (onDiscardRound) {
-                    onDiscardRound();
-                  }
-                }
+                setShowHoleSelector(false);
+                setShowDiscardConfirm(true);
               }}
             >
               <Trash2 size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* End Round Confirmation Dialog */}
+    {showEndRoundConfirm && (() => {
+      // Calculate how many holes have been played
+      const completedHolesSet = new Set(
+        Array.from(holeStates.values())
+          .filter(state => state.holeComplete)
+          .map(state => state.hole)
+      );
+      // Add current hole if it's complete
+      if (holeComplete) {
+        completedHolesSet.add(hole);
+      }
+      const holesPlayed = completedHolesSet.size;
+
+      return (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={() => setShowEndRoundConfirm(false)}>
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--spacing-xl)',
+            maxWidth: '400px',
+            width: '90%',
+          }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--color-text)' }}>
+              End Round?
+            </h3>
+            <p style={{ marginBottom: 'var(--spacing-lg)', color: 'var(--color-text-secondary)' }}>
+              You've played {holesPlayed} hole{holesPlayed !== 1 ? 's' : ''}. Do you want to finish the round now?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+              <button
+                onClick={() => {
+                  setShowEndRoundConfirm(false);
+                  handleSaveRound();
+                }}
+                className="submit-button"
+                style={{ width: '100%' }}
+              >
+                Yes, Save Round
+              </button>
+              <button
+                onClick={() => setShowEndRoundConfirm(false)}
+                className="auth-button"
+                style={{ width: '100%', background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              >
+                Resume Round
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* Discard Round Confirmation Dialog */}
+    {showDiscardConfirm && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.8)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }} onClick={() => setShowDiscardConfirm(false)}>
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          padding: 'var(--spacing-xl)',
+          maxWidth: '400px',
+          width: '90%',
+        }} onClick={(e) => e.stopPropagation()}>
+          <h3 style={{ marginBottom: 'var(--spacing-md)', color: 'var(--color-text)' }}>
+            Discard Round?
+          </h3>
+          <p style={{ marginBottom: 'var(--spacing-lg)', color: 'var(--color-text-secondary)' }}>
+            Are you sure you want to discard this round? All data will be lost and cannot be recovered.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+            <button
+              onClick={() => {
+                setShowDiscardConfirm(false);
+                handleDiscardRound();
+                if (onDiscardRound) {
+                  onDiscardRound();
+                }
+              }}
+              className="auth-button logout-button"
+              style={{ width: '100%' }}
+            >
+              Yes, Discard Round
+            </button>
+            <button
+              onClick={() => setShowDiscardConfirm(false)}
+              className="auth-button"
+              style={{ width: '100%', background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              Cancel
             </button>
           </div>
         </div>

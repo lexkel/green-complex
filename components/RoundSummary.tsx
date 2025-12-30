@@ -87,6 +87,10 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
 
   holeSummaries.sort((a, b) => a.hole - b.hole);
 
+  // Calculate OUT/IN totals for full 18-hole rounds
+  const outPutts = holeSummaries.filter(h => h.hole >= 1 && h.hole <= 9).reduce((sum, h) => sum + h.puttCount, 0);
+  const inPutts = holeSummaries.filter(h => h.hole >= 10 && h.hole <= 18).reduce((sum, h) => sum + h.puttCount, 0);
+
   const formatDate = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = {
       weekday: 'short',
@@ -230,6 +234,19 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
             <div className="round-summary-putts-label">
               Total putts • {holesPlayed} Hole{holesPlayed !== 1 ? 's' : ''}
             </div>
+            {holesPlayed === 18 && (
+              <div style={{
+                fontSize: '0.875rem',
+                color: 'var(--color-text-secondary)',
+                marginTop: '0.25rem',
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'center'
+              }}>
+                <span>OUT: {outPutts}</span>
+                <span>IN: {inPutts}</span>
+              </div>
+            )}
           </div>
         </div>
 

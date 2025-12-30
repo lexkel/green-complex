@@ -319,15 +319,15 @@ button{
 
 .distance-input {
   padding: var(--spacing-md);
-  border: 2px solid var(--color-border);
+  /* border: 2px solid var(--color-border); */
   border-radius: var(--radius);
   font-size: 1rem;
-  width: 100%;
+  /* width: 100%; */
 }
 
 .distance-input:focus {
   outline: none;
-  border-color: var(--color-primary);
+  /* border-color: var(--color-primary); */
 }
 
 .outcome-toggle {
@@ -777,37 +777,6 @@ button{
   margin-left: var(--spacing-xs);
 }
 
-.distance-slider {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--color-border);
-  outline: none;
-  margin: var(--spacing-lg) 0;
-}
-
-.distance-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(26, 122, 82, 0.4);
-}
-
-.distance-slider::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 2px 8px rgba(26, 122, 82, 0.4);
-}
-
 .preset-distances {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1185,7 +1154,7 @@ button{
 
 .putt-info-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   flex-shrink: 0;
 }
@@ -1199,6 +1168,7 @@ button{
 .putt-label.holed {
   color: var(--color-primary);
   font-weight: 700;
+  font-size: 1.25rem;
 }
 
 .distance-display-compact {
@@ -1296,78 +1266,47 @@ button{
 
 .distance-controls {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-lg);
   align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) 0;
 }
 
-.tap-in-btn {
-  padding: 8px 16px;
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.tap-in-btn.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
-}
-
-.tap-in-btn:hover:not(.active) {
-  background: var(--color-border);
-  color: var(--color-text);
-}
-
-.distance-slider-group {
-  flex: 1;
+.distance-display-centered {
   display: flex;
-  align-items: center;
-}
-
-.distance-slider {
-  width: 100%;
-  height: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--color-border);
-  border-radius: 2px;
-  outline: none;
-}
-
-.distance-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--color-primary);
+  align-items: baseline;
+  gap: 0.25rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  user-select: none;
+  width: 6rem;
+  justify-content: right;
 }
 
-.distance-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  cursor: pointer;
+.distance-value-input-large {
+  min-width: 7.5rem;
+  background: transparent;
   border: none;
-  transition: all 0.15s ease;
+  color: var(--color-text);
+  font-size: 2.5rem;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
 }
 
-.distance-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+.distance-value-input-large:focus {
+  outline: none;
+  outline-offset: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
-.distance-slider::-moz-range-thumb:hover {
-  transform: scale(1.2);
+.distance-unit-large {
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  justify-content: right;
 }
 
 .distance-adjust-btn {
@@ -1427,8 +1366,6 @@ button{
 .outcome-compact.missed:hover {
   background: var(--color-border);
 }
-
-
 
 /* Grid wrapper for green */
 
@@ -1760,8 +1697,103 @@ button{
 
 .zoom-control-btn:hover {
   background: rgba(42, 42, 42, 0.9);
-  border-color: rgba(107, 114, 128, 0.6);
-  transform: scale(1.05);
+}
+
+/* Large Next Button - positioned on right side of canvas */
+.canvas-next-btn {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 64px;
+  min-height: 64px;
+  background: rgba(26, 26, 26, 0.85);
+  border: 1.5px solid rgba(107, 114, 128, 0.4);
+  /* border-radius: 50%; */
+  border-radius: var(--radius);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.canvas-next-btn:hover {
+  transform: translateY(-50%) scale(1.05);
+  background: rgba(42, 42, 42, 0.9);
+}
+
+.canvas-next-btn:active {
+  transform: translateY(-50%) scale(0.98);
+}
+
+/* Primary canvas button - larger, positioned at vertical center */
+.canvas-next-btn-primary {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 64px;
+  min-height: 64px;
+  background: rgba(26, 26, 26, 0.85);
+  border: 1.5px solid rgba(107, 114, 128, 0.4);
+  /* border-radius: 50%; */
+  border-radius: var(--radius);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.canvas-next-btn-primary:hover {
+  transform: translateY(-50%) scale(1.05);
+  background: rgba(42, 42, 42, 0.9);
+}
+
+.canvas-next-btn-primary:active {
+  transform: translateY(-50%) scale(0.98);
+}
+
+/* Secondary canvas button - smaller, positioned above primary */
+.canvas-next-btn-secondary {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(calc(-50% - 64px)); /* Position above primary: -50% for center, -72px to move up (64px button + 8px gap) */
+  min-width: 36px;
+  min-height: 36px;
+  background: rgba(26, 26, 26, 0.7);
+  border: 1.5px solid rgba(107, 114, 128, 0.3);
+  /* border-radius: 50%; */
+  border-radius: var(--radius);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.canvas-next-btn-secondary:hover {
+  transform: translateY(calc(-50% - 72px)) scale(1.05);
+  background: rgba(42, 42, 42, 0.85);
+  color: white;
+}
+
+.canvas-next-btn-secondary:active {
+  transform: translateY(calc(-50% - 72px)) scale(0.98);
 }
 
 .zoom-control-btn:active {
