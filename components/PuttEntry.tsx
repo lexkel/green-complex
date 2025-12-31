@@ -685,6 +685,10 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       endProximity.vertical
     );
 
+    // Get course name from courseId
+    const course = COURSES.find(c => c.id === courseId) || customCourses.find(c => c.id === courseId);
+    const courseName = course?.name || 'Unknown';
+
     const putt: PuttingAttempt = {
       timestamp: new Date().toISOString(),
       distance: puttStartDistance,
@@ -695,7 +699,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       pinPosition: { x: pinPosition.x, y: pinPosition.y },
       puttNumber,
       holeNumber: hole,
-      course: currentHoleData?.courseName || 'Unknown',
+      course: courseName,
       missDirection: missDirection,
     };
 
@@ -807,6 +811,10 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       const endProximity = { horizontal: 0, vertical: 0 };
       const endDistance = 0;
 
+      // Get course name from courseId
+      const course = COURSES.find(c => c.id === courseId) || customCourses.find(c => c.id === courseId);
+      const courseName = course?.name || 'Unknown';
+
       const putt: PuttingAttempt = {
         timestamp: new Date().toISOString(),
         distance: startDistance,
@@ -817,7 +825,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         pinPosition: { x: pinPosition.x, y: pinPosition.y },
         puttNumber,
         holeNumber: hole,
-        course: currentHoleData?.courseName || 'Unknown',
+        course: courseName,
       };
 
       // Add to pending putts (will be saved at end of round)
