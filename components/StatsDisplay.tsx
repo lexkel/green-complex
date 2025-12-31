@@ -166,33 +166,16 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   });
 
   // Calculate miss direction breakdown
-  // Include all missed putts, calculate direction from proximity data if missDirection not stored
-  const allMissedPutts = putts.filter(p => !p.made && p.proximity);
-
-  const calculateMissDirection = (putt: PuttingAttempt): 'short' | 'long' | 'left' | 'right' => {
-    if (putt.missDirection) return putt.missDirection;
-
-    // Fallback: calculate from proximity data
-    if (!putt.proximity || !putt.startProximity) return 'short';
-
-    const dx = putt.proximity.horizontal - putt.startProximity.horizontal;
-    const dy = putt.proximity.vertical - putt.startProximity.vertical;
-    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-    const normalizedAngle = (angle + 360) % 360;
-
-    if (normalizedAngle >= 315 || normalizedAngle < 45) return 'right';
-    else if (normalizedAngle >= 45 && normalizedAngle < 135) return 'long';
-    else if (normalizedAngle >= 135 && normalizedAngle < 225) return 'left';
-    else return 'short';
-  };
+  // Only use putts that have missDirection stored (no proximity fallback)
+  const missedPuttsWithDirection = putts.filter(p => !p.made && p.missDirection);
 
   const missDirections = {
-    short: allMissedPutts.filter(p => calculateMissDirection(p) === 'short').length,
-    long: allMissedPutts.filter(p => calculateMissDirection(p) === 'long').length,
-    left: allMissedPutts.filter(p => calculateMissDirection(p) === 'left').length,
-    right: allMissedPutts.filter(p => calculateMissDirection(p) === 'right').length,
+    short: missedPuttsWithDirection.filter(p => p.missDirection === 'short').length,
+    long: missedPuttsWithDirection.filter(p => p.missDirection === 'long').length,
+    left: missedPuttsWithDirection.filter(p => p.missDirection === 'left').length,
+    right: missedPuttsWithDirection.filter(p => p.missDirection === 'right').length,
   };
-  const totalMisses = allMissedPutts.length;
+  const totalMisses = missedPuttsWithDirection.length;
   const missPercentages = {
     short: totalMisses > 0 ? (missDirections.short / totalMisses) * 100 : 0,
     long: totalMisses > 0 ? (missDirections.long / totalMisses) * 100 : 0,
