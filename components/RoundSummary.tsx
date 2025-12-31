@@ -11,6 +11,7 @@ interface RoundSummaryProps {
   onDone: () => void;
   onEditMetadata?: (courseName: string, date: Date) => void;
   onEditHole?: (holeNumber: number) => void;
+  onViewHole?: (holeNumber: number) => void; // Callback to view a hole (read-only)
   onAddHole?: (holeNumber: number) => void; // Callback to add a new hole
   isHistorical?: boolean; // Whether viewing a saved round from history
 }
@@ -22,7 +23,7 @@ interface HoleSummary {
   holedDistance: number;
 }
 
-export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, onEditHole, onAddHole, isHistorical = false }: RoundSummaryProps) {
+export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, onEditHole, onViewHole, onAddHole, isHistorical = false }: RoundSummaryProps) {
   const [editCourseName, setEditCourseName] = useState(courseName);
   const [editDate, setEditDate] = useState(date);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
@@ -336,9 +337,15 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
               <div
                 key={holeSummary.hole}
                 className="round-summary-hole-item"
-                onClick={() => isEditMode && onEditHole && onEditHole(holeSummary.hole)}
+                onClick={() => {
+                  if (isEditMode && onEditHole) {
+                    onEditHole(holeSummary.hole);
+                  } else if (!isEditMode && onViewHole) {
+                    onViewHole(holeSummary.hole);
+                  }
+                }}
                 style={{
-                  cursor: isEditMode && onEditHole ? 'pointer' : 'default'
+                  cursor: (isEditMode && onEditHole) || (!isEditMode && onViewHole) ? 'pointer' : 'default'
                 }}
               >
                 <div className="round-summary-hole-number">

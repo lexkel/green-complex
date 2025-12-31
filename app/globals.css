@@ -1733,6 +1733,37 @@ button{
   transform: translateY(-50%) scale(0.98);
 }
 
+/* Previous button on canvas - positioned on left side */
+.canvas-prev-btn {
+  position: absolute;
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 64px;
+  min-height: 64px;
+  background: rgba(26, 26, 26, 0.85);
+  border: 1.5px solid rgba(107, 114, 128, 0.4);
+  border-radius: var(--radius);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.canvas-prev-btn:hover {
+  transform: translateY(-50%) scale(1.05);
+  background: rgba(42, 42, 42, 0.9);
+}
+
+.canvas-prev-btn:active {
+  transform: translateY(-50%) scale(0.98);
+}
+
 /* Primary canvas button - larger, positioned at vertical center */
 .canvas-next-btn-primary {
   position: absolute;

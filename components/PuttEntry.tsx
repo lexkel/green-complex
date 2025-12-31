@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Flag, Trash2, ChevronRight } from 'lucide-react';
+import { Flag, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { PuttingAttempt } from '@/types';
 import { NEANGAR_PARK, COURSES, getHoleData, GreenShape, HoleData, CourseData } from '@/data/courses';
 import { RoundHistory } from '@/lib/roundHistory';
@@ -19,6 +19,7 @@ interface PuttEntryProps {
   onDiscardRound?: () => void; // Callback when round is discarded
   courseId?: string; // Course ID to use for this round
   isEditingRound?: boolean; // True when editing an existing round (prevents duplicate saves)
+  isViewOnly?: boolean; // True when viewing a historical round (read-only, no edits allowed)
 }
 
 interface Position {
@@ -43,7 +44,7 @@ interface HoleState {
 }
 
 
-export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId, isEditingRound }: PuttEntryProps) {
+export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId, isEditingRound, isViewOnly = false }: PuttEntryProps) {
   const [hasRestoredFromStorage, setHasRestoredFromStorage] = useState(false);
   const [pinPosition, setPinPosition] = useState<Position>({ x: 50, y: 50 });
   const [ballPosition, setBallPosition] = useState<Position | null>(null);
@@ -676,6 +677,14 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   const recordMissedPutt = (endPosition: Position, endDistance: number) => {
     const endProximity = calculateProximity(pinPosition, endPosition);
 
+    // Calculate miss direction for storage
+    const missDirection = calculateMissDirectionValue(
+      puttStartProximity.horizontal,
+      puttStartProximity.vertical,
+      endProximity.horizontal,
+      endProximity.vertical
+    );
+
     const putt: PuttingAttempt = {
       timestamp: new Date().toISOString(),
       distance: puttStartDistance,
@@ -686,7 +695,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       pinPosition: { x: pinPosition.x, y: pinPosition.y },
       puttNumber,
       holeNumber: hole,
-      course: NEANGAR_PARK.name,
+      course: currentHoleData?.courseName || 'Unknown',
+      missDirection: missDirection,
     };
 
     // Add to pending putts instead of saving immediately
@@ -807,7 +817,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         pinPosition: { x: pinPosition.x, y: pinPosition.y },
         puttNumber,
         holeNumber: hole,
-        course: NEANGAR_PARK.name,
+        course: currentHoleData?.courseName || 'Unknown',
       };
 
       // Add to pending putts (will be saved at end of round)
@@ -948,6 +958,25 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     } else {
       // Ball veered to the left of target line (-135 to -45)
       return `${endDistance.toFixed(1)}m left`;
+    }
+  };
+
+  // Calculate miss direction value for storage
+  const calculateMissDirectionValue = (startX: number, startY: number, endX: number, endY: number): 'short' | 'long' | 'left' | 'right' => {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const normalizedAngle = (angle + 360) % 360;
+
+    // Determine primary direction based on angle
+    if (normalizedAngle >= 315 || normalizedAngle < 45) {
+      return 'right';
+    } else if (normalizedAngle >= 45 && normalizedAngle < 135) {
+      return 'long';
+    } else if (normalizedAngle >= 135 && normalizedAngle < 225) {
+      return 'left';
+    } else {
+      return 'short';
     }
   };
 
@@ -1332,11 +1361,21 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
 
   // Render green shape based on type
   const renderGreenShape = (shape: GreenShape, zoom: number) => {
-    // Calculate transform string with optional offset
-    // Scale from center (50,50) to keep pin positions relative to green
+    // Calculate the actual center of the shape from its bounds
+    let centerX = 50;
+    let centerY = 50;
+
+    if (shape.bounds) {
+      centerX = (shape.bounds.minX + shape.bounds.maxX) / 2;
+      centerY = (shape.bounds.minY + shape.bounds.maxY) / 2;
+    }
+
+    // Apply manual offset if provided
     const offsetX = shape.offsetX || 0;
     const offsetY = shape.offsetY || 0;
-    const transform = `translate(${50 + offsetX}, ${50 + offsetY}) scale(${1/zoom}) translate(${-50}, ${-50})`;
+
+    // Transform: move to canvas center (50,50), apply zoom, then move back by shape's actual center
+    const transform = `translate(${50 + offsetX}, ${50 + offsetY}) scale(${1/zoom}) translate(${-centerX}, ${-centerY})`;
 
     if (shape.type === 'svg' && shape.svgPath) {
       return (
@@ -1463,7 +1502,12 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button className="back-button" onClick={() => {
             console.log('[BACK BUTTON] Clicked in PuttEntry');
+            console.log('[BACK BUTTON] isViewOnly:', isViewOnly);
+            console.log('[BACK BUTTON] isEditingRound:', isEditingRound);
             console.log('[BACK BUTTON] onNavigationAttempt:', onNavigationAttempt);
+
+            // If viewing or editing a round, navigate back to home (which will show round summary)
+            // Otherwise, navigate to home normally
             onNavigationAttempt?.('home');
           }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -1494,16 +1538,18 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             </svg>
           </button>
         </div>
-        <div className="hole-navigation-header">
-          <button
-            className="hole-nav-btn-header"
-            style={{gap: '0.5rem'}}
-            onClick={() => setShowEndRoundConfirm(true)}
-          >
-            <Flag size={18} />
-            <span style={{color:'#fff'}}>End Round</span>
-          </button>
-        </div>
+        {!isViewOnly && !isEditingRound && (
+          <div className="hole-navigation-header">
+            <button
+              className="hole-nav-btn-header"
+              style={{gap: '0.5rem'}}
+              onClick={() => setShowEndRoundConfirm(true)}
+            >
+              <Flag size={18} />
+              <span style={{color:'#fff'}}>End Round</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Green Visualisation - More Compact */}
@@ -1511,7 +1557,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         <div className="green-wrapper-grid">
           {/* Outcome/Pin buttons overlaid on canvas bottom-right - only show when appropriate */}
           <div className="canvas-outcome-controls-overlay">
-            {holeComplete ? (
+            {!isViewOnly && (holeComplete ? (
               <button
                 className="canvas-outcome-btn"
                 onClick={handleResetHole}
@@ -1548,11 +1594,40 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                   </button>
                 )}
               </>
-            ) : null}
+            ) : null)}
           </div>
 
-          {/* Large Next Button - positioned right side, vertically centered */}
+          {/* Navigation Buttons - positioned on sides, vertically centered */}
           {(() => {
+            // In view-only mode, always show prev/next navigation buttons
+            if (isViewOnly) {
+              return (
+                <>
+                  {/* Previous button on left side */}
+                  {hole > 1 && (
+                    <button
+                      className="canvas-prev-btn"
+                      onClick={handlePreviousHole}
+                      aria-label="Previous Hole"
+                    >
+                      <ChevronLeft size={32} />
+                    </button>
+                  )}
+                  {/* Next button on right side */}
+                  {hole < 18 && (
+                    <button
+                      className="canvas-next-btn"
+                      onClick={handleNextHole}
+                      aria-label="Next Hole"
+                    >
+                      <ChevronRight size={32} />
+                    </button>
+                  )}
+                </>
+              );
+            }
+
+            // In edit mode, show completion-based navigation (existing behavior)
             // Calculate which holes have been completed
             const completedHolesSet = new Set(
               Array.from(holeStates.values())
@@ -1634,14 +1709,14 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             ref={greenRef}
             className="green-svg-compact"
             viewBox={`${viewBoxOffset.x} ${viewBoxOffset.y} 100 100`}
-            onClick={isEditingDistance ? undefined : handleGreenClick}
-            onMouseDown={isEditingDistance ? undefined : handleMouseDown}
-            onMouseMove={isEditingDistance ? undefined : handleMouseMove}
-            onMouseUp={isEditingDistance ? undefined : handleMouseUp}
-            onMouseLeave={isEditingDistance ? undefined : handleMouseLeave}
+            onClick={isViewOnly || isEditingDistance ? undefined : handleGreenClick}
+            onMouseDown={isViewOnly || isEditingDistance ? undefined : handleMouseDown}
+            onMouseMove={isViewOnly || isEditingDistance ? undefined : handleMouseMove}
+            onMouseUp={isViewOnly || isEditingDistance ? undefined : handleMouseUp}
+            onMouseLeave={isViewOnly || isEditingDistance ? undefined : handleMouseLeave}
             style={{
-              cursor: isEditingDistance ? 'default' : (holeComplete ? 'not-allowed' : (isAdjustingPin ? 'crosshair' : (isMousePanning ? 'grabbing' : 'pointer'))),
-              pointerEvents: isEditingDistance ? 'none' : 'auto',
+              cursor: isViewOnly ? 'default' : (isEditingDistance ? 'default' : (holeComplete ? 'not-allowed' : (isAdjustingPin ? 'crosshair' : (isMousePanning ? 'grabbing' : 'pointer')))),
+              pointerEvents: isViewOnly || isEditingDistance ? 'none' : 'auto',
               opacity: isEditingDistance ? 0.5 : 1,
               transition: 'opacity 0.2s'
             }}
@@ -1891,13 +1966,15 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                         ? `From ${putt.distance.toFixed(1)}m ...`
                         : `From ${startDescriptor} to ${formatMissDirection(putt.startProximity, putt.endProximity, putt.endDistance)}`}
                   </span>
-                  <button
-                    className="putt-history-delete"
-                    onClick={() => handleDeletePutt(idx)}
-                    aria-label="Delete putt"
-                  >
-                    ×
-                  </button>
+                  {!isViewOnly && (
+                    <button
+                      className="putt-history-delete"
+                      onClick={() => handleDeletePutt(idx)}
+                      aria-label="Delete putt"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               );
             })

@@ -52,6 +52,7 @@ export default function Home() {
   const [showRoundSummary, setShowRoundSummary] = useState(false);
   const [savedRoundData, setSavedRoundData] = useState<{putts: PuttingAttempt[], courseName: string, date: Date, roundId?: string} | null>(null);
   const [isViewingHistoricalRound, setIsViewingHistoricalRound] = useState(false);
+  const [isViewingRoundReadOnly, setIsViewingRoundReadOnly] = useState(false);
   const [openMenuRoundId, setOpenMenuRoundId] = useState<string | null>(null);
   const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
   const [originalRoundPutts, setOriginalRoundPutts] = useState<PuttingAttempt[] | null>(null);
@@ -458,6 +459,12 @@ export default function Home() {
   };
 
   const handleViewRound = (round: SavedRound) => {
+    // Look up and set courseId from courseName
+    const courseId = getCourseIdFromName(round.course);
+    if (courseId) {
+      setSelectedCourseId(courseId);
+    }
+
     setSavedRoundData({
       putts: round.putts,
       courseName: round.course,
@@ -504,6 +511,24 @@ export default function Home() {
     // Reload recent rounds to reflect changes
     const rounds = await RoundHistory.getRounds();
     setRecentRounds(rounds);
+  };
+
+  // Helper function to find courseId from courseName
+  const getCourseIdFromName = (courseName: string): string | null => {
+    // Check built-in courses
+    const builtInCourse = COURSES.find(c => c.name === courseName);
+    if (builtInCourse) {
+      return builtInCourse.id;
+    }
+
+    // Check custom courses from IndexedDB
+    const customCourse = customCourses.find(c => c.name === courseName);
+    if (customCourse) {
+      return customCourse.id;
+    }
+
+    // Fallback: No match found
+    return null;
   };
 
   const restoreRoundForEditing = (putts: PuttingAttempt[], courseName: string, startTimestamp: string, targetHole?: number) => {
@@ -559,13 +584,23 @@ export default function Home() {
       // Build putt history from the saved putts
       // IMPORTANT: Reconstruct startProximity from previous putt's endProximity
       const puttHistory = holePutts.map((putt, idx) => {
-        // Calculate endDistance from endProximity (distance from pin to where ball stopped)
+        // Use the NEXT putt's distance as the endDistance (the measured distance after this putt)
+        // This avoids recalculating from proximity coordinates which can be inaccurate
         let endDistance = 0;
-        if (putt.proximity) {
-          endDistance = Math.sqrt(
-            putt.proximity.horizontal * putt.proximity.horizontal +
-            putt.proximity.vertical * putt.proximity.vertical
-          );
+        if (putt.made) {
+          // Ball went in, endDistance is 0
+          endDistance = 0;
+        } else if (idx < holePutts.length - 1) {
+          // Use next putt's start distance as this putt's end distance
+          endDistance = holePutts[idx + 1].distance;
+        } else {
+          // Last putt in sequence - calculate from proximity as fallback
+          if (putt.proximity) {
+            endDistance = Math.sqrt(
+              putt.proximity.horizontal * putt.proximity.horizontal +
+              putt.proximity.vertical * putt.proximity.vertical
+            );
+          }
         }
 
         return {
@@ -621,7 +656,7 @@ export default function Home() {
     // Create ActiveRoundData structure
     const activeRoundData = {
       id: savedRoundData?.roundId || crypto.randomUUID(),
-      courseId: courseName.toLowerCase().replace(/\s+/g, '_'),
+      courseId: getCourseIdFromName(courseName) || courseName.toLowerCase().replace(/\s+/g, '_'),
       courseName: courseName,
       startTimestamp: startTimestamp,
       currentHole: currentHole,
@@ -648,6 +683,15 @@ export default function Home() {
     // Set editing round ID if available
     if (savedRoundData.roundId) {
       setEditingRoundId(savedRoundData.roundId);
+    }
+
+    // Ensure we're NOT in view-only mode (we're editing)
+    setIsViewingRoundReadOnly(false);
+
+    // Look up courseId from courseName and set it
+    const courseId = getCourseIdFromName(savedRoundData.courseName);
+    if (courseId) {
+      setSelectedCourseId(courseId);
     }
 
     // Restore the round data to active storage, targeting the specific hole
@@ -687,6 +731,15 @@ export default function Home() {
       setEditingRoundId(savedRoundData.roundId);
     }
 
+    // Ensure we're NOT in view-only mode (we're editing)
+    setIsViewingRoundReadOnly(false);
+
+    // Look up courseId from courseName and set it
+    const courseId = getCourseIdFromName(savedRoundData.courseName);
+    if (courseId) {
+      setSelectedCourseId(courseId);
+    }
+
     // Restore the round data to active storage, targeting the new hole
     restoreRoundForEditing(
       savedRoundData.putts,
@@ -707,6 +760,31 @@ export default function Home() {
     setGetRoundDataFn(() => getEditRoundData);
 
     // Close summary and navigate to entry tab
+    setShowRoundSummary(false);
+    setActiveTab('entry');
+  };
+
+  const handleViewHole = (holeNumber: number) => {
+    if (!savedRoundData) return;
+
+    // Look up courseId from courseName and set it
+    const courseId = getCourseIdFromName(savedRoundData.courseName);
+    if (courseId) {
+      setSelectedCourseId(courseId);
+    }
+
+    // Restore the round data to active storage for viewing only (read-only)
+    restoreRoundForEditing(
+      savedRoundData.putts,
+      savedRoundData.courseName,
+      savedRoundData.date.toISOString(),
+      holeNumber
+    );
+
+    // Set view-only mode
+    setIsViewingRoundReadOnly(true);
+
+    // Close summary and navigate to entry tab in view-only mode
     setShowRoundSummary(false);
     setActiveTab('entry');
   };
@@ -736,7 +814,17 @@ export default function Home() {
   const handleNavigationAttempt = (targetTab: 'home' | 'entry' | 'stats') => {
     console.log('[NAV] Navigation attempt to:', targetTab);
     console.log('[NAV] editingRoundId:', editingRoundId);
+    console.log('[NAV] isViewingRoundReadOnly:', isViewingRoundReadOnly);
+    console.log('[NAV] savedRoundData:', savedRoundData);
     console.log('[NAV] getRoundDataFn:', getRoundDataFn ? 'exists' : 'NULL');
+
+    // If viewing a round in read-only mode and navigating to home, show round summary
+    if (isViewingRoundReadOnly && targetTab === 'home' && savedRoundData) {
+      console.log('[NAV] Viewing read-only, returning to round summary');
+      setShowRoundSummary(true);
+      setActiveTab('home');
+      return;
+    }
 
     // If not editing, allow navigation
     if (!editingRoundId) {
@@ -773,9 +861,13 @@ export default function Home() {
         setShowEditExitConfirmation(true);
       } else {
         console.log('[NAV] No changes detected, exiting without confirmation');
-        // No changes - exit edit mode WITHOUT showing summary, then navigate
-        exitEditModeWithoutSaving(false);
-        setActiveTab(targetTab);
+        // No changes - exit edit mode
+        // If navigating to home, show round summary. Otherwise navigate to target tab.
+        const shouldShowSummary = targetTab === 'home';
+        exitEditModeWithoutSaving(shouldShowSummary);
+        if (!shouldShowSummary) {
+          setActiveTab(targetTab);
+        }
       }
     } catch (error) {
       console.error('[NAV] Error checking changes:', error);
@@ -1095,12 +1187,14 @@ export default function Home() {
             isHistorical={isViewingHistoricalRound}
             onEditMetadata={handleEditRoundMetadata}
             onEditHole={handleEditHole}
+            onViewHole={handleViewHole}
             onAddHole={handleAddHole}
             onDone={() => {
               console.log('[ROUND SUMMARY] Done button clicked');
               setShowRoundSummary(false);
               setSavedRoundData(null);
               setIsViewingHistoricalRound(false);
+              setIsViewingRoundReadOnly(false);
               setActiveTab('home');
             }}
           />
@@ -1271,6 +1365,7 @@ export default function Home() {
               onNavigationAttempt={handleNavigationAttempt}
               courseId={selectedCourseId}
               isEditingRound={!!editingRoundId}
+              isViewOnly={isViewingRoundReadOnly}
               onDiscardRound={() => {
                 setPendingPuttsCount(0);
                 setHolesComplete(0);
@@ -2255,13 +2350,14 @@ export default function Home() {
               </button>
               <button
                 onClick={() => {
-                  exitEditModeWithoutSaving(false);  // Don't show summary
-                  if (pendingNavigation) {
-                    setActiveTab(pendingNavigation);
-                    setPendingNavigation(null);
-                  } else {
-                    setActiveTab('home');
+                  // If navigating to home, show round summary. Otherwise navigate to target tab.
+                  const targetTab = pendingNavigation || 'home';
+                  const shouldShowSummary = targetTab === 'home';
+                  exitEditModeWithoutSaving(shouldShowSummary);
+                  if (!shouldShowSummary) {
+                    setActiveTab(targetTab);
                   }
+                  setPendingNavigation(null);
                 }}
                 className="auth-button logout-button"
                 style={{ width: '100%' }}

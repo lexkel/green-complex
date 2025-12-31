@@ -16,6 +16,7 @@ export interface PuttingAttempt {
   conditions?: 'fast' | 'medium' | 'slow';
   course?: string;
   notes?: string;
+  missDirection?: 'short' | 'long' | 'left' | 'right';  // Miss direction for missed putts
 }
 
 export interface PuttingStats {
