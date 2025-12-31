@@ -102,7 +102,8 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     { label: '0m — 1m', min: 0, max: 1 },
     { label: '1m — 2m', min: 1, max: 2 },
     { label: '2m — 3m', min: 2, max: 3 },
-    { label: '3m +', min: 3, max: Infinity },
+    { label: '3m — 5m', min: 3, max: 5 },
+    { label: '5m +', min: 5, max: Infinity },
   ];
 
   const makeProbability = distanceRanges.map(range => {
@@ -117,6 +118,62 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     };
   });
 
+  // Calculate three-putt probability by distance (first putt only)
+  // Using different ranges for three-putt analysis
+  const threePuttRanges = [
+    { label: '0m — 5m', min: 0, max: 5 },
+    { label: '5m — 10m', min: 5, max: 10 },
+    { label: '10m — 15m', min: 10, max: 15 },
+    { label: '15m +', min: 15, max: Infinity },
+  ];
+
+  const threePuttProbability = threePuttRanges.map(range => {
+    // Get first putts in this distance range
+    const holesMap = new Map<number, PuttingAttempt[]>();
+    putts.forEach(p => {
+      if (p.holeNumber !== undefined) {
+        if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
+        holesMap.get(p.holeNumber)!.push(p);
+      }
+    });
+
+    const firstPuttsInRange = Array.from(holesMap.values())
+      .map(holePutts => holePutts.sort((a, b) => (a.puttNumber || 0) - (b.puttNumber || 0))[0])
+      .filter(p => p.distance >= range.min && p.distance < range.max);
+
+    // Count holes where first putt was in range and took 3+ putts
+    const threePutts = firstPuttsInRange.filter(firstPutt => {
+      const holeNumber = firstPutt.holeNumber;
+      if (holeNumber === undefined) return false;
+      const holePutts = holesMap.get(holeNumber) || [];
+      return holePutts.length >= 3;
+    }).length;
+
+    const total = firstPuttsInRange.length;
+    return {
+      label: range.label,
+      percentage: total > 0 ? (threePutts / total) * 100 : 0,
+      threePutts,
+      total,
+    };
+  });
+
+  // Calculate miss direction breakdown
+  const missedPutts = putts.filter(p => !p.made && p.missDirection);
+  const missDirections = {
+    short: missedPutts.filter(p => p.missDirection === 'short').length,
+    long: missedPutts.filter(p => p.missDirection === 'long').length,
+    left: missedPutts.filter(p => p.missDirection === 'left').length,
+    right: missedPutts.filter(p => p.missDirection === 'right').length,
+  };
+  const totalMisses = missedPutts.length;
+  const missPercentages = {
+    short: totalMisses > 0 ? (missDirections.short / totalMisses) * 100 : 0,
+    long: totalMisses > 0 ? (missDirections.long / totalMisses) * 100 : 0,
+    left: totalMisses > 0 ? (missDirections.left / totalMisses) * 100 : 0,
+    right: totalMisses > 0 ? (missDirections.right / totalMisses) * 100 : 0,
+  };
+
   return (
     <div className="stats-display-modern">
       {/* Top Summary Cards */}
@@ -130,7 +187,10 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         </div>
         <div className="stats-summary-card">
           <div className="stats-summary-label">AVG PUTTS</div>
-          <div className="stats-summary-value">{avgPuttsPerHole.toFixed(2)}</div>
+          <div className="stats-summary-value">{(avgPuttsPerHole * 18).toFixed(1)}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+            {avgPuttsPerHole.toFixed(2)} per hole
+          </div>
           {avgChange !== 0 && (
             <div className={`stats-summary-change ${avgChange < 0 ? 'positive' : 'negative'}`}>
               {avgChange > 0 ? '↗' : '↘'} {Math.abs(avgChange).toFixed(0)}%
@@ -208,6 +268,30 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         </div>
       </div>
 
+      {/* Three-Putt Probability */}
+      <div className="stats-section-modern">
+        <h3>Three-Putt Probability</h3>
+        <div className="make-probability-list">
+          {threePuttProbability.map((item, index) => (
+            <div key={index} className="make-probability-row">
+              <div className="make-probability-label">{item.label}</div>
+              <div className="make-probability-bar-container">
+                <div
+                  className="make-probability-bar"
+                  style={{
+                    width: `${item.percentage}%`,
+                    backgroundColor: '#ef4444'
+                  }}
+                ></div>
+              </div>
+              <div className="make-probability-percentage">
+                {item.percentage.toFixed(1)}% {item.total > 0 && `(${item.threePutts}/${item.total})`}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Average Putts Trend */}
       {last10Rounds.length > 0 && (
         <div className="stats-section-modern">
@@ -215,8 +299,8 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
             <h3>Average Putts</h3>
             <span className="stats-section-subtitle">Last 10 Rounds</span>
           </div>
-          <div className="trend-chart">
-            <svg width="100%" height="200" viewBox="0 0 500 200" preserveAspectRatio="none">
+          <div className="trend-chart" style={{ position: 'relative' }}>
+            <svg width="100%" height="260" viewBox="0 0 500 260" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="avgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="rgba(74, 222, 128, 0.3)" />
@@ -225,64 +309,188 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
               </defs>
               {/* Area under curve */}
               <path
-                d={generateAreaPath(last10Rounds.map(r => r.avgPutts))}
+                d={generateAreaPath(last10Rounds.map(r => r.avgPutts), 200)}
                 fill="url(#avgGradient)"
               />
               {/* Line */}
               <path
-                d={generateLinePath(last10Rounds.map(r => r.avgPutts))}
+                d={generateLinePath(last10Rounds.map(r => r.avgPutts), 200)}
                 fill="none"
                 stroke="#4ade80"
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {/* Last point */}
-              {last10Rounds.length > 1 && (
-                <circle
-                  cx={(last10Rounds.length - 1) * (500 / (last10Rounds.length - 1))}
-                  cy={200 - ((last10Rounds[last10Rounds.length - 1].avgPutts - Math.min(...last10Rounds.map(r => r.avgPutts)) + 0.5) / (Math.max(...last10Rounds.map(r => r.avgPutts)) - Math.min(...last10Rounds.map(r => r.avgPutts)) + 1)) * 160}
-                  r="6"
-                  fill="white"
-                  stroke="#4ade80"
-                  strokeWidth="2"
-                />
-              )}
-              {last10Rounds.length === 1 && (
-                <circle
-                  cx={250}
-                  cy={100}
-                  r="6"
-                  fill="white"
-                  stroke="#4ade80"
-                  strokeWidth="2"
-                />
-              )}
+              {/* Data points with values */}
+              {last10Rounds.map((round, index) => {
+                const min = Math.min(...last10Rounds.map(r => r.avgPutts));
+                const max = Math.max(...last10Rounds.map(r => r.avgPutts));
+                const range = max - min || 1;
+                const x = last10Rounds.length > 1 ? index * (500 / (last10Rounds.length - 1)) : 250;
+                const y = 200 - ((round.avgPutts - min + 0.5) / (range + 1)) * 160;
+
+                return (
+                  <g key={index}>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r="4"
+                      fill="white"
+                      stroke="#4ade80"
+                      strokeWidth="2"
+                    />
+                    <text
+                      x={x}
+                      y={y - 12}
+                      textAnchor="middle"
+                      fill="rgba(255, 255, 255, 0.7)"
+                      fontSize="11"
+                      fontWeight="500"
+                    >
+                      {round.avgPutts.toFixed(1)}
+                    </text>
+                  </g>
+                );
+              })}
+              {/* Date labels at bottom */}
+              {last10Rounds.map((round, index) => {
+                const x = last10Rounds.length > 1 ? index * (500 / (last10Rounds.length - 1)) : 250;
+                const showDate = index === 0 || index === last10Rounds.length - 1;
+
+                if (!showDate) return null;
+
+                const date = new Date(round.timestamp);
+                const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
+
+                return (
+                  <text
+                    key={`date-${index}`}
+                    x={x}
+                    y={235}
+                    textAnchor="middle"
+                    fill="rgba(255, 255, 255, 0.5)"
+                    fontSize="10"
+                  >
+                    {dateStr}
+                  </text>
+                );
+              })}
             </svg>
           </div>
         </div>
       )}
 
-      {/* Total Putts Trend */}
-      {last10Rounds.length > 0 && (
+
+      {/* Miss Direction Breakdown */}
+      {totalMisses > 0 && (
         <div className="stats-section-modern">
-          <div className="stats-section-header">
-            <h3>Total Putts</h3>
-            <span className="stats-section-subtitle">Trend</span>
-          </div>
-          <div className="trend-chart trend-chart-secondary">
-            <div className="trend-chart-value">{last10Rounds[last10Rounds.length - 1]?.totalPutts || 0}</div>
-            <div className="trend-chart-label">Latest</div>
-            <svg width="100%" height="120" viewBox="0 0 500 120" preserveAspectRatio="none">
-              {/* Dotted line */}
-              <path
-                d={generateLinePath(last10Rounds.map(r => r.totalPutts), 120)}
-                fill="none"
-                stroke="rgba(255, 255, 255, 0.3)"
-                strokeWidth="2"
-                strokeDasharray="5,5"
-              />
+          <h3>Miss Direction</h3>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2rem', padding: '1rem 0' }}>
+            {/* Donut Chart */}
+            <svg width="180" height="180" viewBox="0 0 180 180">
+              <defs>
+                <filter id="shadow">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3"/>
+                </filter>
+              </defs>
+              {(() => {
+                const radius = 70;
+                const innerRadius = 45;
+                const centerX = 90;
+                const centerY = 90;
+
+                const segments = [
+                  { color: '#ef4444', percentage: missPercentages.short, label: 'Short' },
+                  { color: '#f97316', percentage: missPercentages.long, label: 'Long' },
+                  { color: '#3b82f6', percentage: missPercentages.left, label: 'Left' },
+                  { color: '#8b5cf6', percentage: missPercentages.right, label: 'Right' },
+                ];
+
+                let currentAngle = -90; // Start at top
+
+                return segments.map((segment, index) => {
+                  if (segment.percentage === 0) return null;
+
+                  const angle = (segment.percentage / 100) * 360;
+                  const startAngle = currentAngle;
+                  const endAngle = currentAngle + angle;
+
+                  // Convert to radians
+                  const startRad = (startAngle * Math.PI) / 180;
+                  const endRad = (endAngle * Math.PI) / 180;
+
+                  // Calculate outer arc points
+                  const x1 = centerX + radius * Math.cos(startRad);
+                  const y1 = centerY + radius * Math.sin(startRad);
+                  const x2 = centerX + radius * Math.cos(endRad);
+                  const y2 = centerY + radius * Math.sin(endRad);
+
+                  // Calculate inner arc points
+                  const x3 = centerX + innerRadius * Math.cos(endRad);
+                  const y3 = centerY + innerRadius * Math.sin(endRad);
+                  const x4 = centerX + innerRadius * Math.cos(startRad);
+                  const y4 = centerY + innerRadius * Math.sin(startRad);
+
+                  const largeArc = angle > 180 ? 1 : 0;
+
+                  const path = `
+                    M ${x1} ${y1}
+                    A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}
+                    L ${x3} ${y3}
+                    A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4}
+                    Z
+                  `;
+
+                  currentAngle = endAngle;
+
+                  return (
+                    <path
+                      key={index}
+                      d={path}
+                      fill={segment.color}
+                      filter="url(#shadow)"
+                    />
+                  );
+                });
+              })()}
+              {/* Center circle */}
+              <circle cx="90" cy="90" r="45" fill="var(--color-background)" />
+              {/* Center text */}
+              <text x="90" y="85" textAnchor="middle" fill="var(--color-text)" fontSize="24" fontWeight="bold">
+                {totalMisses}
+              </text>
+              <text x="90" y="102" textAnchor="middle" fill="var(--color-text-secondary)" fontSize="12">
+                Misses
+              </text>
             </svg>
+
+            {/* Legend */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ef4444' }}></div>
+                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                  Short {missPercentages.short.toFixed(0)}% ({missDirections.short})
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#f97316' }}></div>
+                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                  Long {missPercentages.long.toFixed(0)}% ({missDirections.long})
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#3b82f6' }}></div>
+                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                  Left {missPercentages.left.toFixed(0)}% ({missDirections.left})
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#8b5cf6' }}></div>
+                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                  Right {missPercentages.right.toFixed(0)}% ({missDirections.right})
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -294,15 +502,18 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           <div className="stats-card-value">
             {calculateAvgFirstPuttDistance(putts).toFixed(1)}m
           </div>
-          {/* <div className="stats-card-badge">High</div> */}
         </div>
         <div className="stats-card-modern">
           <div className="stats-card-label">AVG MAKE DIST</div>
           <div className="stats-card-value">
             {calculateAvgMakeDistance(putts).toFixed(1)}m
           </div>
-          {/* 
-          <div className="stats-card-badge">Avg</div> */}
+        </div>
+        <div className="stats-card-modern">
+          <div className="stats-card-label">TOTAL DIST MADE</div>
+          <div className="stats-card-value">
+            {calculateTotalMadeDistance(putts).toFixed(0)}m
+          </div>
         </div>
       </div>
     </div>
@@ -328,13 +539,13 @@ function generateLinePath(values: number[], height: number = 200): string {
 }
 
 // Helper function to generate SVG path for area chart
-function generateAreaPath(values: number[]): string {
+function generateAreaPath(values: number[], height: number = 200): string {
   if (values.length === 0) return '';
 
-  const linePath = generateLinePath(values);
+  const linePath = generateLinePath(values, height);
   const lastX = (values.length - 1) * (500 / (values.length - 1 || 1));
 
-  return `${linePath} L ${lastX},200 L 0,200 Z`;
+  return `${linePath} L ${lastX},${height} L 0,${height} Z`;
 }
 
 // Helper function to calculate average first putt distance
@@ -363,4 +574,10 @@ function calculateAvgMakeDistance(putts: PuttingAttempt[]): number {
   if (madePutts.length === 0) return 0;
 
   return madePutts.reduce((sum, p) => sum + p.distance, 0) / madePutts.length;
+}
+
+// Helper function to calculate total distance of made putts
+function calculateTotalMadeDistance(putts: PuttingAttempt[]): number {
+  const madePutts = putts.filter(p => p.made);
+  return madePutts.reduce((sum, p) => sum + p.distance, 0);
 }
