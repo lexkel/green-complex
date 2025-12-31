@@ -183,7 +183,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
 
   return (
     <div className="stats-display-modern">
-      {/* Top Summary Cards */}
+      {/* Top Summary Cards - Row 1 */}
       <div className="stats-summary-cards">
         <div className="stats-summary-card">
           <div className="stats-summary-label">ROUNDS</div>
@@ -203,6 +203,22 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
               {avgChange > 0 ? '↗' : '↘'} {Math.abs(avgChange).toFixed(0)}%
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Top Summary Cards - Row 2 */}
+      <div className="stats-grid-modern">
+        <div className="stats-card-modern">
+          <div className="stats-card-label">AVG 1ST PUTT DIST</div>
+          <div className="stats-card-value">
+            {calculateAvgFirstPuttDistance(putts).toFixed(1)}m
+          </div>
+        </div>
+        <div className="stats-card-modern">
+          <div className="stats-card-label">AVG MAKE DIST</div>
+          <div className="stats-card-value">
+            {calculateAvgMakeDistance(putts).toFixed(1)}m
+          </div>
         </div>
       </div>
 
@@ -589,21 +605,6 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         </div>
       )}
 
-      {/* Distance stat cards at bottom */}
-      <div className="stats-grid-modern">
-        <div className="stats-card-modern">
-          <div className="stats-card-label">AVG 1ST PUTT DIST</div>
-          <div className="stats-card-value">
-            {calculateAvgFirstPuttDistance(putts).toFixed(1)}m
-          </div>
-        </div>
-        <div className="stats-card-modern">
-          <div className="stats-card-label">AVG MAKE DIST</div>
-          <div className="stats-card-value">
-            {calculateAvgMakeDistance(putts).toFixed(1)}m
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
