@@ -1191,6 +1191,15 @@ export default function Home() {
             onAddHole={handleAddHole}
             onDone={() => {
               console.log('[ROUND SUMMARY] Done button clicked');
+
+              // If we were just viewing (not editing), clear the active round storage
+              if (isViewingRoundReadOnly && !editingRoundId) {
+                ActiveRoundStorage.clearActiveRound();
+                setPendingPuttsCount(0);
+                setHolesComplete(0);
+                setActiveRoundInfo(null);
+              }
+
               setShowRoundSummary(false);
               setSavedRoundData(null);
               setIsViewingHistoricalRound(false);
@@ -1468,7 +1477,7 @@ export default function Home() {
 
           <div className="home-content-wrapper">
           {/* Active Round */}
-          {pendingPuttsCount > 0 && !editingRoundId && (
+          {pendingPuttsCount > 0 && !editingRoundId && !isViewingRoundReadOnly && (
             <>
               <div className="home-section-header">
                 <h2 className="home-section-title">Active Round</h2>
