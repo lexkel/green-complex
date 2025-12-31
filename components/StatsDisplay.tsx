@@ -15,6 +15,7 @@ interface RoundStats {
   totalPutts: number;
   avgPutts: number;
   timestamp: string;
+  totalMadeDistance: number;
 }
 
 export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
@@ -35,12 +36,18 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const stats = StatsCalculator.calculateStats(putts, unit);
 
   // Calculate round-based stats
-  const roundStats: RoundStats[] = rounds.map((round, index) => ({
-    roundNumber: rounds.length - index,
-    totalPutts: round.totalPutts,
-    avgPutts: round.holesPlayed > 0 ? round.totalPutts / round.holesPlayed : 0,
-    timestamp: round.timestamp,
-  })).reverse();
+  const roundStats: RoundStats[] = rounds.map((round, index) => {
+    const madePutts = round.putts.filter(p => p.made);
+    const totalMadeDistance = madePutts.reduce((sum, p) => sum + p.distance, 0);
+
+    return {
+      roundNumber: rounds.length - index,
+      totalPutts: round.totalPutts,
+      avgPutts: round.holesPlayed > 0 ? round.totalPutts / round.holesPlayed : 0,
+      timestamp: round.timestamp,
+      totalMadeDistance,
+    };
+  }).reverse();
 
   // Calculate last 20 rounds for putt breakdown
   const last20Rounds = rounds.slice(0, 20);
@@ -300,7 +307,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
             <span className="stats-section-subtitle">Last 10 Rounds</span>
           </div>
           <div className="trend-chart" style={{ position: 'relative' }}>
-            <svg width="100%" height="260" viewBox="0 0 500 260" preserveAspectRatio="none">
+            <svg width="100%" height="260" viewBox="-30 0 560 260" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="avgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="rgba(74, 222, 128, 0.3)" />
@@ -380,6 +387,93 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         </div>
       )}
 
+      {/* Total Distance Made Trend */}
+      {last10Rounds.length > 0 && (
+        <div className="stats-section-modern">
+          <div className="stats-section-header">
+            <h3>Total Distance Made</h3>
+            <span className="stats-section-subtitle">Last 10 Rounds</span>
+          </div>
+          <div className="trend-chart" style={{ position: 'relative' }}>
+            <svg width="100%" height="260" viewBox="-30 0 560 260" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="distGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="rgba(139, 92, 246, 0.3)" />
+                  <stop offset="100%" stopColor="rgba(139, 92, 246, 0)" />
+                </linearGradient>
+              </defs>
+              {/* Area under curve */}
+              <path
+                d={generateAreaPath(last10Rounds.map(r => r.totalMadeDistance), 200)}
+                fill="url(#distGradient)"
+              />
+              {/* Line */}
+              <path
+                d={generateLinePath(last10Rounds.map(r => r.totalMadeDistance), 200)}
+                fill="none"
+                stroke="#8b5cf6"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Data points with values */}
+              {last10Rounds.map((round, index) => {
+                const min = Math.min(...last10Rounds.map(r => r.totalMadeDistance));
+                const max = Math.max(...last10Rounds.map(r => r.totalMadeDistance));
+                const range = max - min || 1;
+                const x = last10Rounds.length > 1 ? index * (500 / (last10Rounds.length - 1)) : 250;
+                const y = 200 - ((round.totalMadeDistance - min + 0.5) / (range + 1)) * 160;
+
+                return (
+                  <g key={index}>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r="4"
+                      fill="white"
+                      stroke="#8b5cf6"
+                      strokeWidth="2"
+                    />
+                    <text
+                      x={x}
+                      y={y - 12}
+                      textAnchor="middle"
+                      fill="rgba(255, 255, 255, 0.7)"
+                      fontSize="11"
+                      fontWeight="500"
+                    >
+                      {round.totalMadeDistance.toFixed(0)}m
+                    </text>
+                  </g>
+                );
+              })}
+              {/* Date labels at bottom */}
+              {last10Rounds.map((round, index) => {
+                const x = last10Rounds.length > 1 ? index * (500 / (last10Rounds.length - 1)) : 250;
+                const showDate = index === 0 || index === last10Rounds.length - 1;
+
+                if (!showDate) return null;
+
+                const date = new Date(round.timestamp);
+                const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
+
+                return (
+                  <text
+                    key={`date-${index}`}
+                    x={x}
+                    y={235}
+                    textAnchor="middle"
+                    fill="rgba(255, 255, 255, 0.5)"
+                    fontSize="10"
+                  >
+                    {dateStr}
+                  </text>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+      )}
 
       {/* Miss Direction Breakdown */}
       {totalMisses > 0 && (
@@ -509,12 +603,6 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
             {calculateAvgMakeDistance(putts).toFixed(1)}m
           </div>
         </div>
-        <div className="stats-card-modern">
-          <div className="stats-card-label">TOTAL DIST MADE</div>
-          <div className="stats-card-value">
-            {calculateTotalMadeDistance(putts).toFixed(0)}m
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -577,7 +665,3 @@ function calculateAvgMakeDistance(putts: PuttingAttempt[]): number {
 }
 
 // Helper function to calculate total distance of made putts
-function calculateTotalMadeDistance(putts: PuttingAttempt[]): number {
-  const madePutts = putts.filter(p => p.made);
-  return madePutts.reduce((sum, p) => sum + p.distance, 0);
-}
