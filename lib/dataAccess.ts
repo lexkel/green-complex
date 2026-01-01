@@ -68,7 +68,7 @@ export class DataAccess {
       });
 
       holePutts.forEach((putt, idx) => {
-        puttRecords.push({
+        const puttRecord = {
           id: crypto.randomUUID(),
           holeId,
           roundId,
@@ -82,10 +82,17 @@ export class DataAccess {
           startProximityVertical: putt.startProximity?.vertical,
           pinPositionX: putt.pinPosition?.x,
           pinPositionY: putt.pinPosition?.y,
+          missDirection: putt.missDirection,
+          courseName: putt.course || course,
+          holeNumber: putt.holeNumber || holeNumber,
+          recordedAt: putt.timestamp || createdAt,
           createdAt,
           updatedAt,
           dirty: true, // New data always marked dirty until synced
-        });
+        };
+
+        console.log('[DataAccess] Saving putt to IndexedDB:', puttRecord);
+        puttRecords.push(puttRecord);
       });
     });
 
@@ -123,7 +130,7 @@ export class DataAccess {
 
     // Convert back to PuttingAttempt format
     return putts.map(p => ({
-      timestamp: p.createdAt,
+      timestamp: p.recordedAt || p.createdAt,
       distance: p.distance,
       distanceUnit: 'metres' as const,
       made: p.made,
@@ -137,6 +144,9 @@ export class DataAccess {
         ? { x: p.pinPositionX, y: p.pinPositionY }
         : undefined,
       puttNumber: p.puttNumber,
+      holeNumber: p.holeNumber,
+      course: p.courseName,
+      missDirection: p.missDirection,
     }));
   }
 
@@ -263,6 +273,10 @@ export class DataAccess {
             startProximityVertical: putt.startProximity?.vertical,
             pinPositionX: putt.pinPosition?.x,
             pinPositionY: putt.pinPosition?.y,
+            missDirection: putt.missDirection,
+            courseName: putt.course || (options?.course || existingRound.course),
+            holeNumber: putt.holeNumber || holeNumber,
+            recordedAt: putt.timestamp || existingRound.createdAt,
             createdAt: existingRound.createdAt,
             updatedAt: now,
             dirty: true,

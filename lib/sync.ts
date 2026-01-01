@@ -120,6 +120,10 @@ export class SyncService {
               start_proximity_vertical: p.startProximityVertical,
               pin_position_x: p.pinPositionX,
               pin_position_y: p.pinPositionY,
+              miss_direction: p.missDirection,
+              course_name: p.courseName,
+              hole_number: p.holeNumber,
+              recorded_at: p.recordedAt,
               created_at: p.createdAt,
               updated_at: p.updatedAt,
             })), {
@@ -340,6 +344,10 @@ export class SyncService {
                 startProximityVertical: putt.start_proximity_vertical,
                 pinPositionX: putt.pin_position_x,
                 pinPositionY: putt.pin_position_y,
+                missDirection: putt.miss_direction,
+                courseName: putt.course_name,
+                holeNumber: putt.hole_number,
+                recordedAt: putt.recorded_at,
                 createdAt: putt.created_at,
                 updatedAt: putt.updated_at,
                 dirty: false, // Remote data is clean

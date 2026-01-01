@@ -41,6 +41,11 @@ export interface Putt {
   // Pin position
   pinPositionX?: number;
   pinPositionY?: number;
+  // New metadata fields
+  missDirection?: 'short' | 'long' | 'left' | 'right';
+  courseName?: string;
+  holeNumber?: number;
+  recordedAt?: string; // ISO timestamp when putt was recorded
   // Metadata
   createdAt: string;
   updatedAt: string;
@@ -97,6 +102,14 @@ export class GreenComplexDB extends Dexie {
       rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt, deleted',
       holes: 'id, roundId, holeNumber',
       putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt',
+      courses: 'id, userId, updatedAt, dirty, syncedAt, deleted',
+    });
+
+    // Version 5: Add new metadata fields to putts
+    this.version(5).stores({
+      rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt, deleted',
+      holes: 'id, roundId, holeNumber',
+      putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt, courseName, holeNumber, recordedAt, missDirection',
       courses: 'id, userId, updatedAt, dirty, syncedAt, deleted',
     });
   }

@@ -685,6 +685,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       endProximity.vertical
     );
 
+    console.log('[PuttEntry] Recording missed putt with missDirection:', missDirection);
+
     // Get course name from courseId
     const course = COURSES.find(c => c.id === courseId) || customCourses.find(c => c.id === courseId);
     const courseName = course?.name || 'Unknown';
@@ -702,6 +704,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       course: courseName,
       missDirection: missDirection,
     };
+
+    console.log('[PuttEntry] Created putt object:', putt);
 
     // Add to pending putts instead of saving immediately
     setPendingPutts([...pendingPutts, putt]);

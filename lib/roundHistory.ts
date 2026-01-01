@@ -39,27 +39,48 @@ export class RoundHistory {
           .equals(round.id)
           .toArray();
 
+        console.log(`[RoundHistory] Round ${round.id}: Found ${holes.length} holes in DB`);
+        console.log(`[RoundHistory] Holes:`, holes.map(h => ({ id: h.id, holeNumber: h.holeNumber })));
+
         // Create a map of holeId to holeNumber for quick lookup
         const holeMap = new Map(holes.map(h => [h.id, h.holeNumber]));
+        console.log(`[RoundHistory] HoleMap size: ${holeMap.size}`);
 
         // Convert back to PuttingAttempt format
-        const puttingAttempts: PuttingAttempt[] = putts.map(p => ({
-          timestamp: p.createdAt,
-          distance: p.distance,
-          distanceUnit: 'metres' as const,
-          made: p.made,
-          proximity: (p.endProximityHorizontal !== undefined && p.endProximityVertical !== undefined)
-            ? { horizontal: p.endProximityHorizontal, vertical: p.endProximityVertical }
-            : undefined,
-          startProximity: (p.startProximityHorizontal !== undefined && p.startProximityVertical !== undefined)
-            ? { horizontal: p.startProximityHorizontal, vertical: p.startProximityVertical }
-            : undefined,
-          pinPosition: (p.pinPositionX !== undefined && p.pinPositionY !== undefined)
-            ? { x: p.pinPositionX, y: p.pinPositionY }
-            : undefined,
-          puttNumber: p.puttNumber,
-          holeNumber: holeMap.get(p.holeId),
-        }));
+        const puttingAttempts: PuttingAttempt[] = putts.map(p => {
+          const resolvedHoleNumber = p.holeNumber || holeMap.get(p.holeId);
+
+          // Log when holeNumber is missing
+          if (resolvedHoleNumber === undefined) {
+            console.log(`[RoundHistory] MISSING holeNumber for putt:`, {
+              puttId: p.id,
+              holeId: p.holeId,
+              storedHoleNumber: p.holeNumber,
+              holeMapLookup: holeMap.get(p.holeId),
+              holeMapHas: holeMap.has(p.holeId),
+            });
+          }
+
+          return {
+            timestamp: p.createdAt,
+            distance: p.distance,
+            distanceUnit: 'metres' as const,
+            made: p.made,
+            proximity: (p.endProximityHorizontal !== undefined && p.endProximityVertical !== undefined)
+              ? { horizontal: p.endProximityHorizontal, vertical: p.endProximityVertical }
+              : undefined,
+            startProximity: (p.startProximityHorizontal !== undefined && p.startProximityVertical !== undefined)
+              ? { horizontal: p.startProximityHorizontal, vertical: p.startProximityVertical }
+              : undefined,
+            pinPosition: (p.pinPositionX !== undefined && p.pinPositionY !== undefined)
+              ? { x: p.pinPositionX, y: p.pinPositionY }
+              : undefined,
+            puttNumber: p.puttNumber,
+            holeNumber: resolvedHoleNumber,
+            course: p.courseName,
+            missDirection: p.missDirection,
+          };
+        });
 
         return {
           id: round.id,

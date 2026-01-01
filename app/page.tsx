@@ -142,7 +142,13 @@ export default function Home() {
         } else if (accessToken === 'simple-auth-token') {
           // Load putts from IndexedDB rounds for simple auth
           const rounds = await RoundHistory.getRounds();
-          const allPutts = rounds.flatMap(round => round.putts);
+          // When flattening, add roundId to each putt to distinguish holes across different rounds
+          const allPutts = rounds.flatMap(round =>
+            round.putts.map(putt => ({
+              ...putt,
+              roundId: round.id, // Add roundId to distinguish same hole number across different rounds
+            }))
+          );
           setPutts(allPutts);
           setIsLoading(false);
         } else {

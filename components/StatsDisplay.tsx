@@ -135,26 +135,27 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   ];
 
   const threePuttProbability = threePuttRanges.map(range => {
-    // Get first putts in this distance range
-    const holesMap = new Map<number, PuttingAttempt[]>();
+    // Group putts by unique hole (roundId × hole number)
+    const holesMap = new Map<string, PuttingAttempt[]>();
     putts.forEach(p => {
-      if (p.holeNumber !== undefined) {
-        if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
-        holesMap.get(p.holeNumber)!.push(p);
+      if (p.holeNumber !== undefined && p.roundId) {
+        // Create unique key: roundId × hole number
+        const holeKey = `${p.roundId}_${p.holeNumber}`;
+        if (!holesMap.has(holeKey)) holesMap.set(holeKey, []);
+        holesMap.get(holeKey)!.push(p);
       }
     });
 
-    const firstPuttsInRange = Array.from(holesMap.values())
-      .map(holePutts => holePutts.sort((a, b) => (a.puttNumber || 0) - (b.puttNumber || 0))[0])
-      .filter(p => p.distance >= range.min && p.distance < range.max);
+    // For each unique hole, get the first putt and check if it's in range
+    const firstPuttsInRange = Array.from(holesMap.entries())
+      .map(([holeKey, holePutts]) => {
+        const sortedPutts = holePutts.sort((a, b) => (a.puttNumber || 0) - (b.puttNumber || 0));
+        return { holeKey, firstPutt: sortedPutts[0], totalPutts: sortedPutts.length };
+      })
+      .filter(h => h.firstPutt.distance >= range.min && h.firstPutt.distance < range.max);
 
-    // Count holes where first putt was in range and took 3+ putts
-    const threePutts = firstPuttsInRange.filter(firstPutt => {
-      const holeNumber = firstPutt.holeNumber;
-      if (holeNumber === undefined) return false;
-      const holePutts = holesMap.get(holeNumber) || [];
-      return holePutts.length >= 3;
-    }).length;
+    // Count how many holes in range had 3+ putts
+    const threePutts = firstPuttsInRange.filter(h => h.totalPutts >= 3).length;
 
     const total = firstPuttsInRange.length;
     return {
