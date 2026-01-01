@@ -1137,21 +1137,27 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     // Collect all pending putts from all holes
     const allPendingPutts = [...pendingPutts];
 
+    // Get course name from current courseId state (more reliable than ActiveRoundStorage)
+    const course = COURSES.find(c => c.id === courseId) || customCourses.find(c => c.id === courseId);
+    const courseName = course?.name || NEANGAR_PARK.name;
+
+    // Get start timestamp from first putt or active round
+    const activeRound = ActiveRoundStorage.loadActiveRound();
+    const startTimestamp = activeRound?.startTimestamp || allPendingPutts[0]?.timestamp || new Date().toISOString();
+
     // Only save to RoundHistory if NOT editing (prevents duplicates when editing)
     if (allPendingPutts.length > 0 && !isEditingRound) {
-      const activeRoundForHistory = ActiveRoundStorage.loadActiveRound();
-      RoundHistory.saveRound(allPendingPutts, activeRoundForHistory?.courseName || NEANGAR_PARK.name);
+      RoundHistory.saveRound(allPendingPutts, courseName);
     }
 
     // Notify parent that round is complete
     // When editing, parent will intercept this and show confirmation dialog
     // When creating new round, parent will show round summary
     if (onRoundComplete) {
-      const activeRound = ActiveRoundStorage.loadActiveRound();
       onRoundComplete({
         putts: allPendingPutts,
-        courseName: activeRound?.courseName || NEANGAR_PARK.name,
-        startTimestamp: activeRound?.startTimestamp || new Date().toISOString()
+        courseName: courseName,
+        startTimestamp: startTimestamp
       });
     }
 
