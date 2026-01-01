@@ -51,6 +51,28 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
 
   // Calculate last 20 rounds for putt breakdown
   const last20Rounds = rounds.slice(0, 20);
+
+  // Helper function to count actual putts (excluding chip-ins with puttNumber === 0)
+  const countActualPutts = (holePutts: PuttingAttempt[]): number => {
+    // If there's a chip-in marker (puttNumber === 0), it's 0 putts
+    if (holePutts.some(p => p.puttNumber === 0)) {
+      return 0;
+    }
+    // Otherwise, count the putts
+    return holePutts.length;
+  };
+
+  const chipIns = last20Rounds.reduce((sum, round) => {
+    const holes = new Map<number, PuttingAttempt[]>();
+    round.putts.forEach(p => {
+      if (p.holeNumber !== undefined) {
+        if (!holes.has(p.holeNumber)) holes.set(p.holeNumber, []);
+        holes.get(p.holeNumber)!.push(p);
+      }
+    });
+    return sum + Array.from(holes.values()).filter(h => countActualPutts(h) === 0).length;
+  }, 0);
+
   const onePutts = last20Rounds.reduce((sum, round) => {
     const holes = new Map<number, PuttingAttempt[]>();
     round.putts.forEach(p => {
@@ -59,7 +81,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         holes.get(p.holeNumber)!.push(p);
       }
     });
-    return sum + Array.from(holes.values()).filter(h => h.length === 1).length;
+    return sum + Array.from(holes.values()).filter(h => countActualPutts(h) === 1).length;
   }, 0);
 
   const twoPutts = last20Rounds.reduce((sum, round) => {
@@ -70,7 +92,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         holes.get(p.holeNumber)!.push(p);
       }
     });
-    return sum + Array.from(holes.values()).filter(h => h.length === 2).length;
+    return sum + Array.from(holes.values()).filter(h => countActualPutts(h) === 2).length;
   }, 0);
 
   const threePlusPutts = last20Rounds.reduce((sum, round) => {
@@ -81,10 +103,10 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         holes.get(p.holeNumber)!.push(p);
       }
     });
-    return sum + Array.from(holes.values()).filter(h => h.length >= 3).length;
+    return sum + Array.from(holes.values()).filter(h => countActualPutts(h) >= 3).length;
   }, 0);
 
-  const totalHoles = onePutts + twoPutts + threePlusPutts;
+  const totalHoles = chipIns + onePutts + twoPutts + threePlusPutts;
 
   // Calculate avg putts per hole across all rounds
   const totalHolesPlayed = rounds.reduce((sum, r) => sum + r.holesPlayed, 0);
@@ -231,7 +253,42 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           <h3>Putt Breakdown</h3>
           <span className="stats-section-subtitle">Last 20 Rounds</span>
         </div>
-        <div className="putt-breakdown-bar">
+        <div style={{ position: 'relative' }}>
+          <div className="putt-breakdown-bar">
+            {/* Always show chip-in segment with minimum 0.8% width (≈4px) */}
+            {(() => {
+              const actualPercentage = (chipIns / totalHoles) * 100;
+              const displayWidth = Math.max(0.8, actualPercentage);
+              const displayLabel = actualPercentage < 0.1 ? '<0.1%' : `${Math.round(actualPercentage)}%`;
+              // Show label outside if segment is less than 5% (too narrow to read inside)
+              const showLabelOutside = displayWidth < 5;
+
+              return (
+                <>
+                  <div
+                    className="putt-breakdown-segment chip-in"
+                    style={{ width: `${displayWidth}%` }}
+                  >
+                    {!showLabelOutside && <span className="putt-breakdown-label">{displayLabel}</span>}
+                  </div>
+                  {showLabelOutside && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '0',
+                        top: '100%',
+                        fontSize: '0.75rem',
+                        color: '#8b5cf6',
+                        marginTop: '0.25rem',
+                        fontWeight: '600',
+                      }}
+                    >
+                      {displayLabel}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           {onePutts > 0 && (
             <div
               className="putt-breakdown-segment one-putt"
@@ -256,8 +313,13 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
               <span className="putt-breakdown-label">{Math.round((threePlusPutts / totalHoles) * 100)}%</span>
             </div>
           )}
+          </div>
         </div>
         <div className="putt-breakdown-legend">
+          <div className="putt-breakdown-legend-item">
+            <div className="putt-breakdown-legend-dot chip-in"></div>
+            <span>0 Putts</span>
+          </div>
           <div className="putt-breakdown-legend-item">
             <div className="putt-breakdown-legend-dot one-putt"></div>
             <span>1 Putt</span>

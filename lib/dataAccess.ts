@@ -34,6 +34,9 @@ export class DataAccess {
 
     const holesPlayed = puttsByHole.size;
 
+    // Count actual putts (excluding chip-ins with puttNumber === 0)
+    const totalPutts = putts.filter(p => p.puttNumber !== 0).length;
+
     // Create round
     const round: Round = {
       id: roundId,
@@ -42,7 +45,7 @@ export class DataAccess {
       date: createdAt, // Use provided or current timestamp
       completed: true,
       holesPlayed,
-      totalPutts: putts.length,
+      totalPutts,
       createdAt,
       updatedAt,
       dirty: true, // New data always marked dirty until synced
@@ -224,6 +227,9 @@ export class DataAccess {
 
     const holesPlayed = puttsByHole.size;
 
+    // Count actual putts (excluding chip-ins with puttNumber === 0)
+    const totalPutts = putts.filter(p => p.puttNumber !== 0).length;
+
     await db.transaction('rw', db.rounds, db.holes, db.putts, async () => {
       // Delete old holes and putts
       const oldHoles = await db.holes.where('roundId').equals(roundId).toArray();
@@ -236,7 +242,7 @@ export class DataAccess {
         course: options?.course || existingRound.course,
         date: options?.date || existingRound.date,
         holesPlayed,
-        totalPutts: putts.length,
+        totalPutts,
         updatedAt: now,
         dirty: true, // Mark as dirty for sync
       });

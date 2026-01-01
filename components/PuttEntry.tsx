@@ -867,6 +867,39 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     }
   };
 
+  const handleChipIn = () => {
+    // Record chip-in (zero putts on the hole)
+    // Create a special "chip-in" record with distance 0 to track this explicitly
+
+    // Get course name from courseId
+    const course = COURSES.find(c => c.id === courseId) || customCourses.find(c => c.id === courseId);
+    const courseName = course?.name || 'Unknown';
+
+    // Create a chip-in record (zero-distance putt that was made)
+    const chipInRecord: PuttingAttempt = {
+      timestamp: new Date().toISOString(),
+      distance: 0, // Zero distance indicates chip-in
+      distanceUnit: 'metres',
+      made: true,
+      proximity: { horizontal: 0, vertical: 0 },
+      startProximity: { horizontal: 0, vertical: 0 },
+      pinPosition: { x: pinPosition.x, y: pinPosition.y },
+      puttNumber: 0, // Zero putt number indicates chip-in
+      holeNumber: hole,
+      course: courseName,
+    };
+
+    // Add chip-in record to pending putts
+    setPendingPutts([...pendingPutts, chipInRecord]);
+
+    setHoleComplete(true);
+    setPuttStartProximity(null);
+    setPuttStartDistance(0);
+    // Reset zoom and pan to default position
+    setCanvasZoom(2.2);
+    setViewBoxOffset({ x: 0, y: 0 });
+  };
+
 
   const formatProximityDescription = (proximity: any): string => {
     if (!proximity) return '';
@@ -1606,7 +1639,23 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                   </button>
                 )}
               </>
-            ) : null)}
+            ) : (
+              <>
+                {/* Pin placed but no ball positioned yet - offer chip-in option */}
+                <button
+                  className="canvas-outcome-btn holed"
+                  onClick={handleChipIn}
+                >
+                  Chipped in!
+                </button>
+                <button
+                  className="canvas-outcome-btn"
+                  onClick={handleResetHole}
+                >
+                  Reset
+                </button>
+              </>
+            ))}
           </div>
 
           {/* Navigation Buttons - positioned on sides, vertically centered */}
@@ -1968,15 +2017,22 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
               // Calculate the start descriptor for this putt
               const startDescriptor = formatProximitySimple(putt.startProximity, putt.distance);
 
+              // Check if this is a chip-in (puttNum === 0)
+              const isChipIn = putt.puttNum === 0;
+
               return (
                 <div key={idx} className="putt-history-item">
-                  <span className="putt-history-num">Putt {putt.puttNum}:</span>
+                  <span className="putt-history-num">
+                    {isChipIn ? 'Chip-in:' : `Putt ${putt.puttNum}:`}
+                  </span>
                   <span className="putt-history-desc">
-                    {putt.made
-                      ? `Holed from ${putt.distance.toFixed(1)}m`
-                      : putt.endProximity === null
-                        ? `From ${putt.distance.toFixed(1)}m ...`
-                        : `From ${startDescriptor} to ${formatMissDirection(putt.startProximity, putt.endProximity, putt.endDistance)}`}
+                    {isChipIn
+                      ? 'Chipped in'
+                      : putt.made
+                        ? `Holed from ${putt.distance.toFixed(1)}m`
+                        : putt.endProximity === null
+                          ? `From ${putt.distance.toFixed(1)}m ...`
+                          : `From ${startDescriptor} to ${formatMissDirection(putt.startProximity, putt.endProximity, putt.endDistance)}`}
                   </span>
                   {!isViewOnly && (
                     <button

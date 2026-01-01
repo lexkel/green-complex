@@ -2657,12 +2657,20 @@ button{
   position: relative;
 }
 
+.round-summary-breakdown-segment.chip-in {
+  background: #8b5cf680;
+  border-color: #8b5cf620;
+  border-width: 2px;
+  border-style: solid;
+  /* border-radius set dynamically via inline styles */
+}
+
 .round-summary-breakdown-segment.one-putt {
   background: #22c55e40;
   border-color: #22c55e20;
   border-width: 2px;
   border-style: solid;
-  border-radius: 10px 0 0 10px;
+  /* border-radius set dynamically via inline styles */
 }
 
 .round-summary-breakdown-segment.two-putts {
@@ -2670,7 +2678,7 @@ button{
   border-color: #6b728020;
   border-width: 2px;
   border-style: solid;
-  border-radius: 0 0 0 0;
+  /* border-radius set dynamically via inline styles */
 }
 
 .round-summary-breakdown-segment.three-plus-putts {
@@ -2678,7 +2686,7 @@ button{
   border-color: #dc262620;
   border-width: 2px;
   border-style: solid;
-  border-radius: 0 10px 10px 0;
+  /* border-radius set dynamically via inline styles */
 }
 
 .round-summary-breakdown-segment-label {
@@ -2704,6 +2712,13 @@ button{
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 4rem;
+}
+
+.round-summary-breakdown-legend-dot.chip-in {
+  background: #8b5cf680;
+  border-color: #8b5cf620;
+  border-width: 2px;
+  border-style: solid;
 }
 
 .round-summary-breakdown-legend-dot.one-putt {
@@ -3055,6 +3070,10 @@ button{
   transition: all 0.3s ease;
 }
 
+.putt-breakdown-segment.chip-in {
+  background: #8b5cf6;
+}
+
 .putt-breakdown-segment.one-putt {
   background: #1a7a52;
 }
@@ -3077,6 +3096,7 @@ button{
   display: flex;
   gap: 1rem;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .putt-breakdown-legend-item {
@@ -3089,6 +3109,10 @@ button{
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 50%;
+}
+
+.putt-breakdown-legend-dot.chip-in {
+  background: #8b5cf6;
 }
 
 .putt-breakdown-legend-dot.one-putt {

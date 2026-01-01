@@ -41,17 +41,22 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
 
   // Calculate statistics
   const holesPlayed = new Set(putts.map(p => p.holeNumber).filter(h => h !== undefined)).size;
-  const totalPutts = putts.length;
-  const avgPuttsPerHole = holesPlayed > 0 ? (totalPutts / holesPlayed) : 0;
 
-  // Calculate total distance of holed putts
-  const holedPutts = putts.filter(p => p.made);
-  const totalHoledDistance = holedPutts.reduce((sum, p) => sum + p.distance, 0);
+  // Helper function to count actual putts (excluding chip-ins with puttNumber === 0 or distance === 0 and made === true)
+  const countActualPutts = (holePutts: PuttingAttempt[]): number => {
+    // Check for chip-in marker (puttNumber === 0)
+    if (holePutts.some(p => p.puttNumber === 0)) {
+      return 0;
+    }
+    // Also check for old-style chip-ins (single made putt with distance 0)
+    if (holePutts.length === 1 && holePutts[0].made && holePutts[0].distance === 0) {
+      return 0;
+    }
+    // Otherwise, count the putts
+    return holePutts.length;
+  };
 
-  // Calculate average distance of holed putts (the last putt on every hole)
-  const avgHoledDistance = holedPutts.length > 0 ? (totalHoledDistance / holedPutts.length) : 0;
-
-  // Count putts by type (1-putt, 2-putt, 3+)
+  // Count putts by type (1-putt, 2-putt, 3+) - need to do this early to calculate total putts
   const holeGroups = new Map<number, PuttingAttempt[]>();
   putts.forEach(p => {
     if (p.holeNumber !== undefined) {
@@ -62,13 +67,27 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
     }
   });
 
+  // Calculate total putts by summing actual putts per hole
+  const totalPutts = Array.from(holeGroups.values()).reduce((sum, holePutts) => sum + countActualPutts(holePutts), 0);
+  const avgPuttsPerHole = holesPlayed > 0 ? (totalPutts / holesPlayed) : 0;
+
+  // Calculate total distance of holed putts (excluding chip-ins)
+  const holedPutts = putts.filter(p => p.made && p.puttNumber !== 0);
+  const totalHoledDistance = holedPutts.reduce((sum, p) => sum + p.distance, 0);
+
+  // Calculate average distance of holed putts (the last putt on every hole, excluding chip-ins)
+  const avgHoledDistance = holedPutts.length > 0 ? (totalHoledDistance / holedPutts.length) : 0;
+
+  // Count putts by category
+  let chipIns = 0;
   let onePutts = 0;
   let twoPutts = 0;
   let threePlusPutts = 0;
 
   holeGroups.forEach((holePutts) => {
-    const count = holePutts.length;
-    if (count === 1) onePutts++;
+    const count = countActualPutts(holePutts);
+    if (count === 0) chipIns++;
+    else if (count === 1) onePutts++;
     else if (count === 2) twoPutts++;
     else if (count >= 3) threePlusPutts++;
   });
@@ -80,7 +99,7 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
     const holedPutt = holePutts.find(p => p.made);
     holeSummaries.push({
       hole: holeNumber,
-      puttCount: holePutts.length,
+      puttCount: countActualPutts(holePutts),
       putts: holePutts,
       holedDistance: holedPutt?.distance || 0,
     });
@@ -267,50 +286,71 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
         <div className="round-summary-breakdown-visual">
           <h3 className="round-summary-breakdown-visual-title">Putt Breakdown</h3>
           <div className="round-summary-breakdown-bar">
+            {(() => {
+              // Build array of visible segments
+              const segments: Array<{ type: string; count: number; className: string }> = [];
+              if (chipIns > 0) segments.push({ type: 'chip-in', count: chipIns, className: 'chip-in' });
+              if (onePutts > 0) segments.push({ type: 'one-putt', count: onePutts, className: 'one-putt' });
+              if (twoPutts > 0) segments.push({ type: 'two-putts', count: twoPutts, className: 'two-putts' });
+              if (threePlusPutts > 0) segments.push({ type: 'three-plus-putts', count: threePlusPutts, className: 'three-plus-putts' });
+
+              return segments.map((segment, index) => {
+                const percentage = (segment.count / holesPlayed) * 100;
+                const isFirst = index === 0;
+                const isLast = index === segments.length - 1;
+
+                // Determine border radius - need to override CSS with specific values
+                let borderRadius = '0'; // Default: no rounded corners
+                if (isFirst && isLast) {
+                  borderRadius = '8px'; // All corners rounded (only segment)
+                } else if (isFirst) {
+                  borderRadius = '8px 0 0 8px'; // Left corners rounded
+                } else if (isLast) {
+                  borderRadius = '0 8px 8px 0'; // Right corners rounded
+                }
+
+                return (
+                  <div
+                    key={segment.type}
+                    className={`round-summary-breakdown-segment ${segment.className}`}
+                    style={{
+                      width: `${percentage}%`,
+                      borderRadius: borderRadius
+                    }}
+                  >
+                    <span className="round-summary-breakdown-segment-label">
+                      {Math.round(percentage)}%
+                    </span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div className="round-summary-breakdown-legend">
+            {chipIns > 0 && (
+              <div className="round-summary-breakdown-legend-item">
+                <div className="round-summary-breakdown-legend-dot chip-in"></div>
+                <span>0 Putts</span>
+              </div>
+            )}
             {onePutts > 0 && (
-              <div
-                className="round-summary-breakdown-segment one-putt"
-                style={{ width: `${(onePutts / holesPlayed) * 100}%` }}
-              >
-                <span className="round-summary-breakdown-segment-label">
-                  {Math.round((onePutts / holesPlayed) * 100)}%
-                </span>
+              <div className="round-summary-breakdown-legend-item">
+                <div className="round-summary-breakdown-legend-dot one-putt"></div>
+                <span>1 Putt</span>
               </div>
             )}
             {twoPutts > 0 && (
-              <div
-                className="round-summary-breakdown-segment two-putts"
-                style={{ width: `${(twoPutts / holesPlayed) * 100}%` }}
-              >
-                <span className="round-summary-breakdown-segment-label">
-                  {Math.round((twoPutts / holesPlayed) * 100)}%
-                </span>
+              <div className="round-summary-breakdown-legend-item">
+                <div className="round-summary-breakdown-legend-dot two-putts"></div>
+                <span>2 Putts</span>
               </div>
             )}
             {threePlusPutts > 0 && (
-              <div
-                className="round-summary-breakdown-segment three-plus-putts"
-                style={{ width: `${(threePlusPutts / holesPlayed) * 100}%` }}
-              >
-                <span className="round-summary-breakdown-segment-label">
-                  {Math.round((threePlusPutts / holesPlayed) * 100)}%
-                </span>
+              <div className="round-summary-breakdown-legend-item">
+                <div className="round-summary-breakdown-legend-dot three-plus-putts"></div>
+                <span>3+ Putts</span>
               </div>
             )}
-          </div>
-          <div className="round-summary-breakdown-legend">
-            <div className="round-summary-breakdown-legend-item">
-              <div className="round-summary-breakdown-legend-dot one-putt"></div>
-              <span>1 Putt</span>
-            </div>
-            <div className="round-summary-breakdown-legend-item">
-              <div className="round-summary-breakdown-legend-dot two-putts"></div>
-              <span>2 Putts</span>
-            </div>
-            <div className="round-summary-breakdown-legend-item">
-              <div className="round-summary-breakdown-legend-dot three-plus-putts"></div>
-              <span>3+ Putts</span>
-            </div>
           </div>
         </div>
 
@@ -352,10 +392,10 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                   Hole {holeSummary.hole}
                 </div>
                 <div className="round-summary-hole-putts">
-                  {holeSummary.puttCount} {holeSummary.puttCount === 1 ? 'putt' : 'putts'}
+                  {holeSummary.puttCount === 0 ? 'Chipped in' : `${holeSummary.puttCount} ${holeSummary.puttCount === 1 ? 'putt' : 'putts'}`}
                 </div>
                 <div className="round-summary-hole-distance">
-                  Holed from {holeSummary.holedDistance.toFixed(1)}m
+                  {holeSummary.puttCount === 0 ? 'No putts' : `Holed from ${holeSummary.holedDistance.toFixed(1)}m`}
                 </div>
               </div>
             ))}
