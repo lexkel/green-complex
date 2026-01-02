@@ -20,6 +20,8 @@ interface RoundStats {
 
 export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const [rounds, setRounds] = useState<SavedRound[]>([]);
+  const [showFirstPuttsOnly, setShowFirstPuttsOnly] = useState(false);
+  const [missDistanceFilter, setMissDistanceFilter] = useState<'all' | 'short' | 'medium' | 'long'>('all');
 
   useEffect(() => {
     RoundHistory.getRounds().then(setRounds);
@@ -115,7 +117,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const totalHolesPlayed = rounds.reduce((sum, r) => sum + r.holesPlayed, 0);
   const avgPuttsPerHole = totalHolesPlayed > 0 ? putts.length / totalHolesPlayed : 0;
 
-  // Calculate change indicators
+  // Calculate change indicators (last 5 vs previous 5)
   const recentRounds = rounds.slice(0, 5);
   const olderRounds = rounds.slice(5, 10);
   const recentAvg = recentRounds.length > 0
@@ -126,20 +128,95 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     : 0;
   const avgChange = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0;
 
+  // Calculate median make distance
+  const calculateMedian = (values: number[]): number => {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  };
+
+  const recentMadePutts = recentRounds.flatMap(r => r.putts?.filter(p => p.made) || []);
+  const olderMadePutts = olderRounds.flatMap(r => r.putts?.filter(p => p.made) || []);
+  const recentMedianMakeDist = calculateMedian(recentMadePutts.map(p => p.distance));
+  const olderMedianMakeDist = calculateMedian(olderMadePutts.map(p => p.distance));
+  const makeDistChange = recentMedianMakeDist - olderMedianMakeDist;
+
+  // Calculate 3-putt risk (1 in X holes)
+  const calculateThreePuttRisk = (roundsData: SavedRound[]) => {
+    let totalHoles = 0;
+    let threePuttHoles = 0;
+
+    roundsData.forEach(round => {
+      const holesMap = new Map<number, PuttingAttempt[]>();
+      round.putts.forEach(p => {
+        if (p.holeNumber !== undefined) {
+          if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
+          holesMap.get(p.holeNumber)!.push(p);
+        }
+      });
+
+      totalHoles += holesMap.size;
+      holesMap.forEach(holePutts => {
+        const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
+        if (puttCount >= 3) threePuttHoles++;
+      });
+    });
+
+    return threePuttHoles > 0 ? totalHoles / threePuttHoles : 0;
+  };
+
+  const recentThreePuttRisk = calculateThreePuttRisk(recentRounds);
+  const olderThreePuttRisk = calculateThreePuttRisk(olderRounds);
+  const threePuttRiskChange = recentThreePuttRisk - olderThreePuttRisk;
+
   // Last 10 rounds for trend chart
   const last10Rounds = roundStats.slice(-10);
+
+  // Calculate median first putt distance per round
+  const medianFirstPuttDistByRound = last10Rounds.map(round => {
+    const roundData = rounds.find(r => r.timestamp === round.timestamp);
+    if (!roundData) return { ...round, medianFirstPuttDist: 0 };
+
+    // Group by hole and get first putt of each
+    const holesMap = new Map<number, PuttingAttempt[]>();
+    roundData.putts.forEach(p => {
+      if (p.holeNumber !== undefined) {
+        if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
+        holesMap.get(p.holeNumber)!.push(p);
+      }
+    });
+
+    const firstPuttDistances: number[] = [];
+    holesMap.forEach(holePutts => {
+      const sorted = holePutts.sort((a, b) => (a.puttNumber || 0) - (b.puttNumber || 0));
+      const firstPutt = sorted[0];
+      if (firstPutt && firstPutt.puttNumber !== 0) {
+        firstPuttDistances.push(firstPutt.distance);
+      }
+    });
+
+    const median = calculateMedian(firstPuttDistances);
+    return { ...round, medianFirstPuttDist: median };
+  });
 
   // Calculate make probability by distance
   const distanceRanges = [
     { label: '0m — 1m', min: 0, max: 1 },
     { label: '1m — 2m', min: 1, max: 2 },
     { label: '2m — 3m', min: 2, max: 3 },
-    { label: '3m — 5m', min: 3, max: 5 },
-    { label: '5m +', min: 5, max: Infinity },
+    { label: '3m — 4m', min: 3, max: 4 },
+    { label: '4m — 5m', min: 4, max: 5 },
+    { label: '5m — 6m', min: 5, max: 6 },
+    { label: '6m +', min: 6, max: Infinity },
   ];
 
   const makeProbability = distanceRanges.map(range => {
-    const puttsInRange = putts.filter(p => p.distance >= range.min && p.distance < range.max);
+    const puttsInRange = putts.filter(p => {
+      const inRange = p.distance >= range.min && p.distance < range.max;
+      const isFirstPutt = !showFirstPuttsOnly || (p.puttNumber === 1);
+      return inRange && isFirstPutt;
+    });
     const made = puttsInRange.filter(p => p.made).length;
     const total = puttsInRange.length;
     return {
@@ -191,9 +268,81 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     };
   });
 
+  // Calculate average leave distance for missed putts (lag putting performance)
+  const lagRanges = [
+    { label: '0m — 5m', min: 0, max: 5 },
+    { label: '5m — 10m', min: 5, max: 10 },
+    { label: '10m — 15m', min: 10, max: 15 },
+    { label: '15m +', min: 15, max: Infinity },
+  ];
+
+  // Use last 10 rounds for lag analysis
+  const last10RoundsPutts = last10Rounds.flatMap(r =>
+    rounds.find(round => round.timestamp === r.timestamp)?.putts || []
+  );
+
+  const avgLeaveDistance = lagRanges.map(range => {
+    // Group putts by hole to find next putt after a miss
+    // Use timestamp as fallback if roundId not available
+    const holesMap = new Map<string, PuttingAttempt[]>();
+
+    last10Rounds.forEach((round, roundIndex) => {
+      const roundPutts = rounds.find(r => r.timestamp === round.timestamp)?.putts || [];
+
+      roundPutts.forEach(p => {
+        if (p.holeNumber !== undefined) {
+          const holeKey = `round${roundIndex}_hole${p.holeNumber}`;
+          if (!holesMap.has(holeKey)) holesMap.set(holeKey, []);
+          holesMap.get(holeKey)!.push(p);
+        }
+      });
+    });
+
+    const leaveDist: number[] = [];
+
+    holesMap.forEach(holePutts => {
+      const sortedPutts = holePutts.sort((a, b) => (a.puttNumber || 0) - (b.puttNumber || 0));
+
+      sortedPutts.forEach((putt, index) => {
+        // Check if this putt is a miss in our range
+        if (!putt.made && putt.distance >= range.min && putt.distance < range.max) {
+          // Find the next putt on this hole
+          const nextPutt = sortedPutts[index + 1];
+          if (nextPutt) {
+            // The next putt's distance is the leave distance
+            leaveDist.push(nextPutt.distance);
+          }
+        }
+      });
+    });
+
+    const avgLeave = leaveDist.length > 0
+      ? leaveDist.reduce((sum, d) => sum + d, 0) / leaveDist.length
+      : 0;
+
+    return {
+      label: range.label,
+      avgLeave,
+      count: leaveDist.length,
+    };
+  });
+
   // Calculate miss direction breakdown
   // Only use putts that have missDirection stored (no proximity fallback)
-  const missedPuttsWithDirection = putts.filter(p => !p.made && p.missDirection);
+  // Filter by distance: all, short (<3m), medium (3-8m), or long (>8m)
+  const missedPuttsWithDirection = putts.filter(p => {
+    if (p.made || !p.missDirection) return false;
+
+    if (missDistanceFilter === 'all') {
+      return true;
+    } else if (missDistanceFilter === 'short') {
+      return p.distance < 3;
+    } else if (missDistanceFilter === 'medium') {
+      return p.distance >= 3 && p.distance <= 8;
+    } else {
+      return p.distance > 8;
+    }
+  });
 
   const missDirections = {
     short: missedPuttsWithDirection.filter(p => p.missDirection === 'short').length,
@@ -235,18 +384,26 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
       </div>
 
       {/* Top Summary Cards - Row 2 */}
-      <div className="stats-grid-modern">
-        <div className="stats-card-modern">
-          <div className="stats-card-label">AVG 1ST PUTT DIST</div>
-          <div className="stats-card-value">
-            {calculateAvgFirstPuttDistance(putts).toFixed(1)}m
-          </div>
+      <div className="stats-summary-cards">
+        <div className="stats-summary-card">
+          <div className="stats-summary-label">MAKE DISTANCE</div>
+          <div className="stats-summary-value">{recentMedianMakeDist.toFixed(1)}m</div>
+          {makeDistChange !== 0 && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+              {makeDistChange > 0 ? '▲' : '▼'} {makeDistChange > 0 ? '+' : ''}{makeDistChange.toFixed(1)}m
+            </div>
+          )}
         </div>
-        <div className="stats-card-modern">
-          <div className="stats-card-label">AVG MAKE DIST</div>
-          <div className="stats-card-value">
-            {calculateAvgMakeDistance(putts).toFixed(1)}m
+        <div className="stats-summary-card">
+          <div className="stats-summary-label">3-PUTT RISK</div>
+          <div className="stats-summary-value">
+            {recentThreePuttRisk > 0 ? `1 in ${Math.round(recentThreePuttRisk)}` : '—'}
           </div>
+          {threePuttRiskChange !== 0 && recentThreePuttRisk > 0 && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+              {threePuttRiskChange > 0 ? '▲' : '▼'} {threePuttRiskChange > 0 ? '+' : ''}{Math.round(threePuttRiskChange)} hole{Math.abs(Math.round(threePuttRiskChange)) !== 1 ? 's' : ''}
+            </div>
+          )}
         </div>
       </div>
 
@@ -340,7 +497,41 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
 
       {/* Make Probability */}
       <div className="stats-section-modern">
-        <h3>Make Probability</h3>
+        <div className="stats-section-header">
+          <h3>Make Probability</h3>
+          <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}>
+            <button
+              onClick={() => setShowFirstPuttsOnly(false)}
+              style={{
+                padding: '0.25rem 0.75rem',
+                background: !showFirstPuttsOnly ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                color: !showFirstPuttsOnly ? '#4ade80' : 'var(--color-text-secondary)',
+                border: '1px solid',
+                borderColor: !showFirstPuttsOnly ? '#4ade80' : 'var(--color-border)',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              All Putts
+            </button>
+            <button
+              onClick={() => setShowFirstPuttsOnly(true)}
+              style={{
+                padding: '0.25rem 0.75rem',
+                background: showFirstPuttsOnly ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                color: showFirstPuttsOnly ? '#4ade80' : 'var(--color-text-secondary)',
+                border: '1px solid',
+                borderColor: showFirstPuttsOnly ? '#4ade80' : 'var(--color-border)',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              First Putts
+            </button>
+          </div>
+        </div>
         <div className="make-probability-list">
           {makeProbability.map((item, index) => (
             <div key={index} className="make-probability-row">
@@ -382,6 +573,42 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           ))}
         </div>
       </div>
+
+      {/* Average Leave Distance */}
+      {avgLeaveDistance.some(item => item.count > 0) && (
+        <div className="stats-section-modern">
+          <div className="stats-section-header">
+            <h3>Average Leave Distance</h3>
+            <span className="stats-section-subtitle">Last 10 Rounds</span>
+          </div>
+          <div className="make-probability-list">
+            {avgLeaveDistance.map((item, index) => {
+              const maxLeave = Math.max(...avgLeaveDistance.map(i => i.avgLeave));
+              const relativeWidth = maxLeave > 0 ? (item.avgLeave / maxLeave) * 100 : 0;
+
+              return (
+                <div key={index} className="make-probability-row">
+                  <div className="make-probability-label">{item.label}</div>
+                  <div className="make-probability-bar-container">
+                    {item.count > 0 && (
+                      <div
+                        className="make-probability-bar"
+                        style={{
+                          width: `${relativeWidth}%`,
+                          backgroundColor: 'rgba(74, 222, 128, 0.4)'
+                        }}
+                      ></div>
+                    )}
+                  </div>
+                  <div className="make-probability-percentage">
+                    {item.count > 0 ? `${item.avgLeave.toFixed(1)}m` : '—'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Average Putts Trend */}
       {last10Rounds.length > 0 && (
@@ -562,7 +789,71 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
       {/* Miss Direction Breakdown */}
       {totalMisses > 0 && (
         <div className="stats-section-modern">
-          <h3>Miss Direction</h3>
+          <div className="stats-section-header">
+            <h3>Miss Direction</h3>
+            <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}>
+              <button
+                onClick={() => setMissDistanceFilter('all')}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  background: missDistanceFilter === 'all' ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                  color: missDistanceFilter === 'all' ? '#4ade80' : 'var(--color-text-secondary)',
+                  border: '1px solid',
+                  borderColor: missDistanceFilter === 'all' ? '#4ade80' : 'var(--color-border)',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setMissDistanceFilter('short')}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  background: missDistanceFilter === 'short' ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                  color: missDistanceFilter === 'short' ? '#4ade80' : 'var(--color-text-secondary)',
+                  border: '1px solid',
+                  borderColor: missDistanceFilter === 'short' ? '#4ade80' : 'var(--color-border)',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                &lt; 3m
+              </button>
+              <button
+                onClick={() => setMissDistanceFilter('medium')}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  background: missDistanceFilter === 'medium' ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                  color: missDistanceFilter === 'medium' ? '#4ade80' : 'var(--color-text-secondary)',
+                  border: '1px solid',
+                  borderColor: missDistanceFilter === 'medium' ? '#4ade80' : 'var(--color-border)',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                3m — 8m
+              </button>
+              <button
+                onClick={() => setMissDistanceFilter('long')}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  background: missDistanceFilter === 'long' ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                  color: missDistanceFilter === 'long' ? '#4ade80' : 'var(--color-text-secondary)',
+                  border: '1px solid',
+                  borderColor: missDistanceFilter === 'long' ? '#4ade80' : 'var(--color-border)',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                &gt; 8m
+              </button>
+            </div>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2rem', padding: '1rem 0' }}>
             {/* Donut Chart */}
             <svg width="180" height="180" viewBox="0 0 180 180">
@@ -669,6 +960,94 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Median First Putt Distance */}
+      {medianFirstPuttDistByRound.length > 0 && (
+        <div className="stats-section-modern">
+          <div className="stats-section-header">
+            <h3>Median First Putt Distance</h3>
+            <span className="stats-section-subtitle">Last 10 Rounds</span>
+          </div>
+          <div className="trend-chart" style={{ position: 'relative' }}>
+            <svg width="100%" height="260" viewBox="-30 0 560 260" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="medianFirstPuttGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="rgba(59, 130, 246, 0.3)" />
+                  <stop offset="100%" stopColor="rgba(59, 130, 246, 0)" />
+                </linearGradient>
+              </defs>
+              {/* Area under curve */}
+              <path
+                d={generateAreaPath(medianFirstPuttDistByRound.map(r => r.medianFirstPuttDist), 200)}
+                fill="url(#medianFirstPuttGradient)"
+              />
+              {/* Line */}
+              <path
+                d={generateLinePath(medianFirstPuttDistByRound.map(r => r.medianFirstPuttDist), 200)}
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Data points with values */}
+              {medianFirstPuttDistByRound.map((round, index) => {
+                const min = Math.min(...medianFirstPuttDistByRound.map(r => r.medianFirstPuttDist));
+                const max = Math.max(...medianFirstPuttDistByRound.map(r => r.medianFirstPuttDist));
+                const range = max - min || 1;
+                const x = medianFirstPuttDistByRound.length > 1 ? index * (500 / (medianFirstPuttDistByRound.length - 1)) : 250;
+                const y = 200 - ((round.medianFirstPuttDist - min + 0.5) / (range + 1)) * 160;
+
+                return (
+                  <g key={index}>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r="4"
+                      fill="white"
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                    />
+                    <text
+                      x={x}
+                      y={y - 12}
+                      textAnchor="middle"
+                      fill="rgba(255, 255, 255, 0.7)"
+                      fontSize="11"
+                      fontWeight="500"
+                    >
+                      {round.medianFirstPuttDist.toFixed(1)}m
+                    </text>
+                  </g>
+                );
+              })}
+              {/* Date labels at bottom */}
+              {medianFirstPuttDistByRound.map((round, index) => {
+                const x = medianFirstPuttDistByRound.length > 1 ? index * (500 / (medianFirstPuttDistByRound.length - 1)) : 250;
+                const showDate = index === 0 || index === medianFirstPuttDistByRound.length - 1;
+
+                if (!showDate) return null;
+
+                const date = new Date(round.timestamp);
+                const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
+
+                return (
+                  <text
+                    key={`date-${index}`}
+                    x={x}
+                    y="230"
+                    textAnchor="middle"
+                    fill="rgba(255, 255, 255, 0.5)"
+                    fontSize="11"
+                  >
+                    {dateStr}
+                  </text>
+                );
+              })}
+            </svg>
           </div>
         </div>
       )}
