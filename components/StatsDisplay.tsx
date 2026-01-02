@@ -142,13 +142,22 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const olderMedianMakeDist = calculateMedian(olderMadePutts.map(p => p.distance));
   const makeDistChange = recentMedianMakeDist - olderMedianMakeDist;
 
-  // Calculate 3-putt risk (1 in X holes)
-  const calculateThreePuttRisk = (roundsData: SavedRound[]) => {
-    let totalHoles = 0;
-    let threePuttHoles = 0;
+  // Calculate three-putt free streak and record streak
+  const calculateThreePuttStreaks = () => {
+    // Sort all rounds by timestamp (oldest first)
+    const sortedRounds = [...rounds].sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
 
-    roundsData.forEach(round => {
+    let currentStreak = 0;
+    let recordStreak = 0;
+    let tempStreak = 0;
+
+    // Work backwards from most recent to calculate current streak
+    for (let i = sortedRounds.length - 1; i >= 0; i--) {
+      const round = sortedRounds[i];
       const holesMap = new Map<number, PuttingAttempt[]>();
+
       round.putts.forEach(p => {
         if (p.holeNumber !== undefined) {
           if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
@@ -156,19 +165,56 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         }
       });
 
-      totalHoles += holesMap.size;
+      let hasThreePutt = false;
       holesMap.forEach(holePutts => {
         const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
-        if (puttCount >= 3) threePuttHoles++;
+        if (puttCount >= 3) hasThreePutt = true;
       });
-    });
 
-    return threePuttHoles > 0 ? totalHoles / threePuttHoles : 0;
+      const holesPlayed = holesMap.size;
+
+      if (hasThreePutt) {
+        break; // Stop counting current streak
+      } else {
+        currentStreak += holesPlayed;
+      }
+    }
+
+    // Calculate record streak by going through all rounds
+    for (let i = 0; i < sortedRounds.length; i++) {
+      const round = sortedRounds[i];
+      const holesMap = new Map<number, PuttingAttempt[]>();
+
+      round.putts.forEach(p => {
+        if (p.holeNumber !== undefined) {
+          if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
+          holesMap.get(p.holeNumber)!.push(p);
+        }
+      });
+
+      let hasThreePutt = false;
+      holesMap.forEach(holePutts => {
+        const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
+        if (puttCount >= 3) hasThreePutt = true;
+      });
+
+      const holesPlayed = holesMap.size;
+
+      if (hasThreePutt) {
+        recordStreak = Math.max(recordStreak, tempStreak);
+        tempStreak = 0;
+      } else {
+        tempStreak += holesPlayed;
+      }
+    }
+
+    // Check final streak
+    recordStreak = Math.max(recordStreak, tempStreak);
+
+    return { currentStreak, recordStreak };
   };
 
-  const recentThreePuttRisk = calculateThreePuttRisk(recentRounds);
-  const olderThreePuttRisk = calculateThreePuttRisk(olderRounds);
-  const threePuttRiskChange = recentThreePuttRisk - olderThreePuttRisk;
+  const { currentStreak, recordStreak } = calculateThreePuttStreaks();
 
   // Last 10 rounds for trend chart
   const last10Rounds = roundStats.slice(-10);
@@ -386,7 +432,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
       {/* Top Summary Cards - Row 2 */}
       <div className="stats-summary-cards">
         <div className="stats-summary-card">
-          <div className="stats-summary-label">MAKE DISTANCE</div>
+          <div className="stats-summary-label">MEDIAN MAKE DISTANCE</div>
           <div className="stats-summary-value">{recentMedianMakeDist.toFixed(1)}m</div>
           {makeDistChange !== 0 && (
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
@@ -395,13 +441,13 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           )}
         </div>
         <div className="stats-summary-card">
-          <div className="stats-summary-label">3-PUTT RISK</div>
+          <div className="stats-summary-label">3-PUTT FREE STREAK</div>
           <div className="stats-summary-value">
-            {recentThreePuttRisk > 0 ? `1 in ${Math.round(recentThreePuttRisk)}` : '—'}
+            {currentStreak > 0 ? `${currentStreak} hole${currentStreak !== 1 ? 's' : ''}` : '—'}
           </div>
-          {threePuttRiskChange !== 0 && recentThreePuttRisk > 0 && (
+          {recordStreak > 0 && (
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-              {threePuttRiskChange > 0 ? '▲' : '▼'} {threePuttRiskChange > 0 ? '+' : ''}{Math.round(threePuttRiskChange)} hole{Math.abs(Math.round(threePuttRiskChange)) !== 1 ? 's' : ''}
+              Record: {recordStreak} hole{recordStreak !== 1 ? 's' : ''}
             </div>
           )}
         </div>

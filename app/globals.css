@@ -3097,6 +3097,7 @@ button{
   gap: 1rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-top: 2rem;
 }
 
 .putt-breakdown-legend-item {

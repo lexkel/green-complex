@@ -36,19 +36,28 @@ export class DataAccess {
     // Check for duplicate rounds (same userId, course, date, holesPlayed)
     // This prevents creating duplicate rounds when syncing across devices
     let roundId = options?.roundId;
+    let isUpdatingExisting = false;
     if (!roundId) {
       const dateOnly = createdAt.split('T')[0];
+      console.log('[DataAccess] Checking for duplicate rounds:', { userId, course, dateOnly, holesPlayed });
+
       const existingRounds = await db.rounds
         .where('userId').equals(userId)
         .and(r => r.course === course && r.date.startsWith(dateOnly) && r.holesPlayed === holesPlayed)
         .toArray();
 
+      console.log('[DataAccess] Found', existingRounds.length, 'existing rounds matching criteria');
+
       if (existingRounds.length > 0) {
-        console.log('[DataAccess] Found existing round with same criteria, updating instead of creating new');
+        console.log('[DataAccess] Found existing round with same criteria, updating instead of creating new:', existingRounds[0].id);
         roundId = existingRounds[0].id;
+        isUpdatingExisting = true;
       } else {
         roundId = crypto.randomUUID();
+        console.log('[DataAccess] Creating new round with ID:', roundId);
       }
+    } else {
+      console.log('[DataAccess] Using provided roundId:', roundId);
     }
 
     // Count actual putts (excluding chip-ins with puttNumber === 0)
@@ -118,7 +127,15 @@ export class DataAccess {
 
     // Save to database (transaction)
     await db.transaction('rw', db.rounds, db.holes, db.putts, async () => {
-      await db.rounds.add(round);
+      // Use put() instead of add() to handle both new and existing rounds
+      await db.rounds.put(round);
+
+      // For holes and putts, delete existing ones first if updating an existing round
+      if (isUpdatingExisting) {
+        await db.holes.where('roundId').equals(roundId).delete();
+        await db.putts.where('roundId').equals(roundId).delete();
+      }
+
       await db.holes.bulkAdd(holes);
       await db.putts.bulkAdd(puttRecords);
     });

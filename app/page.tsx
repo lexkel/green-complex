@@ -1195,7 +1195,7 @@ export default function Home() {
             onEditHole={handleEditHole}
             onViewHole={handleViewHole}
             onAddHole={handleAddHole}
-            onDone={() => {
+            onDone={async () => {
               console.log('[ROUND SUMMARY] Done button clicked');
 
               // If we were just viewing (not editing), clear the active round storage
@@ -1205,6 +1205,12 @@ export default function Home() {
                 setHolesComplete(0);
                 setActiveRoundInfo(null);
               }
+
+              // Reload recent rounds to ensure home tab shows latest data
+              const rounds = await RoundHistory.getRounds();
+              setRecentRounds(rounds);
+              const allPutts = rounds.flatMap(round => round.putts);
+              setPutts(allPutts);
 
               setShowRoundSummary(false);
               setSavedRoundData(null);
