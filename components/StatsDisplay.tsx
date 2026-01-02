@@ -149,6 +149,11 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
+    console.log('[3-Putt Streak] Total rounds:', sortedRounds.length);
+    if (sortedRounds.length > 0) {
+      console.log('[3-Putt Streak] Most recent round:', sortedRounds[sortedRounds.length - 1].course, sortedRounds[sortedRounds.length - 1].timestamp);
+    }
+
     let currentStreak = 0;
     let recordStreak = 0;
     let tempStreak = 0;
@@ -177,7 +182,10 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         });
       }
 
+      console.log('[3-Putt Streak] Round', i, round.course, '- Holes:', holesPlayed, 'Has 3-putt:', hasThreePutt, 'holesMap size:', holesMap.size);
+
       if (hasThreePutt) {
+        console.log('[3-Putt Streak] Found 3-putt, stopping current streak at:', currentStreak);
         break; // Stop counting current streak
       } else {
         currentStreak += holesPlayed;
