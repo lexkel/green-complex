@@ -151,7 +151,9 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
 
     let currentStreak = 0;
     let recordStreak = 0;
+    let recordStreakEndDate: string | null = null;
     let tempStreak = 0;
+    let tempStreakEndDate: string | null = null;
     let foundFirstThreePutt = false;
 
     // Work backwards from most recent round to calculate current streak
@@ -208,21 +210,30 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         const hasThreePutt = puttCount >= 3;
 
         if (hasThreePutt) {
-          recordStreak = Math.max(recordStreak, tempStreak);
+          // Check if this temp streak is the new record
+          if (tempStreak > recordStreak) {
+            recordStreak = tempStreak;
+            recordStreakEndDate = round.timestamp;
+          }
           tempStreak = 0;
+          tempStreakEndDate = null;
         } else {
           tempStreak++;
+          tempStreakEndDate = round.timestamp;
         }
       }
     }
 
-    // Check final streak
-    recordStreak = Math.max(recordStreak, tempStreak);
+    // Check final streak (if record streak continues to present)
+    if (tempStreak > recordStreak) {
+      recordStreak = tempStreak;
+      recordStreakEndDate = tempStreakEndDate;
+    }
 
-    return { currentStreak, recordStreak };
+    return { currentStreak, recordStreak, recordStreakEndDate };
   };
 
-  const { currentStreak, recordStreak } = calculateThreePuttStreaks();
+  const { currentStreak, recordStreak, recordStreakEndDate } = calculateThreePuttStreaks();
 
   // Last 10 rounds for trend chart
   const last10Rounds = roundStats.slice(-10);
@@ -453,9 +464,12 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           <div className="stats-summary-value">
             {currentStreak} hole{currentStreak !== 1 ? 's' : ''}
           </div>
-          {recordStreak > 0 && (
+          {recordStreak > 0 && recordStreak !== currentStreak && (
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-              Record: {recordStreak} hole{recordStreak !== 1 ? 's' : ''}
+              {currentStreak > 0 ? 'Previous record' : 'Record'}: {recordStreak} hole{recordStreak !== 1 ? 's' : ''}
+              {recordStreakEndDate && (
+                <span> ({new Date(recordStreakEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})</span>
+              )}
             </div>
           )}
         </div>
