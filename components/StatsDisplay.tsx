@@ -159,19 +159,23 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
       const holesMap = new Map<number, PuttingAttempt[]>();
 
       round.putts.forEach(p => {
-        if (p.holeNumber !== undefined) {
+        if (p.holeNumber !== undefined && p.holeNumber !== null) {
           if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
           holesMap.get(p.holeNumber)!.push(p);
         }
       });
 
-      let hasThreePutt = false;
-      holesMap.forEach(holePutts => {
-        const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
-        if (puttCount >= 3) hasThreePutt = true;
-      });
+      // If no holes have holeNumber data, use round.holesPlayed as fallback
+      const holesPlayed = holesMap.size > 0 ? holesMap.size : round.holesPlayed;
 
-      const holesPlayed = holesMap.size;
+      // Only check for three-putts if we have hole-level data
+      let hasThreePutt = false;
+      if (holesMap.size > 0) {
+        holesMap.forEach(holePutts => {
+          const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
+          if (puttCount >= 3) hasThreePutt = true;
+        });
+      }
 
       if (hasThreePutt) {
         break; // Stop counting current streak
@@ -186,19 +190,23 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
       const holesMap = new Map<number, PuttingAttempt[]>();
 
       round.putts.forEach(p => {
-        if (p.holeNumber !== undefined) {
+        if (p.holeNumber !== undefined && p.holeNumber !== null) {
           if (!holesMap.has(p.holeNumber)) holesMap.set(p.holeNumber, []);
           holesMap.get(p.holeNumber)!.push(p);
         }
       });
 
-      let hasThreePutt = false;
-      holesMap.forEach(holePutts => {
-        const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
-        if (puttCount >= 3) hasThreePutt = true;
-      });
+      // If no holes have holeNumber data, use round.holesPlayed as fallback
+      const holesPlayed = holesMap.size > 0 ? holesMap.size : round.holesPlayed;
 
-      const holesPlayed = holesMap.size;
+      // Only check for three-putts if we have hole-level data
+      let hasThreePutt = false;
+      if (holesMap.size > 0) {
+        holesMap.forEach(holePutts => {
+          const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
+          if (puttCount >= 3) hasThreePutt = true;
+        });
+      }
 
       if (hasThreePutt) {
         recordStreak = Math.max(recordStreak, tempStreak);
