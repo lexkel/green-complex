@@ -142,7 +142,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const olderMedianMakeDist = calculateMedian(olderMadePutts.map(p => p.distance));
   const makeDistChange = recentMedianMakeDist - olderMedianMakeDist;
 
-  // Calculate three-putt free streak and record streak
+  // Calculate three-putt free streak and record streak (hole-by-hole)
   const calculateThreePuttStreaks = () => {
     // Sort all rounds by timestamp (oldest first)
     const sortedRounds = [...rounds].sort((a, b) =>
@@ -152,8 +152,9 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     let currentStreak = 0;
     let recordStreak = 0;
     let tempStreak = 0;
+    let foundFirstThreePutt = false;
 
-    // Work backwards from most recent to calculate current streak
+    // Work backwards from most recent round to calculate current streak
     for (let i = sortedRounds.length - 1; i >= 0; i--) {
       const round = sortedRounds[i];
       const holesMap = new Map<number, PuttingAttempt[]>();
@@ -165,26 +166,27 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         }
       });
 
-      // If no holes have holeNumber data, use round.holesPlayed as fallback
-      const holesPlayed = holesMap.size > 0 ? holesMap.size : round.holesPlayed;
+      // Get sorted hole numbers (descending for backwards traversal)
+      const holeNumbers = Array.from(holesMap.keys()).sort((a, b) => b - a);
 
-      // Only check for three-putts if we have hole-level data
-      let hasThreePutt = false;
-      if (holesMap.size > 0) {
-        holesMap.forEach(holePutts => {
-          const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
-          if (puttCount >= 3) hasThreePutt = true;
-        });
+      // Process holes backwards (highest to lowest)
+      for (const holeNumber of holeNumbers) {
+        const holePutts = holesMap.get(holeNumber)!;
+        const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
+        const hasThreePutt = puttCount >= 3;
+
+        if (hasThreePutt) {
+          foundFirstThreePutt = true;
+          break; // Stop at first three-putt found
+        } else {
+          currentStreak++;
+        }
       }
 
-      if (hasThreePutt) {
-        break; // Stop counting current streak
-      } else {
-        currentStreak += holesPlayed;
-      }
+      if (foundFirstThreePutt) break;
     }
 
-    // Calculate record streak by going through all rounds
+    // Calculate record streak by going through all rounds chronologically
     for (let i = 0; i < sortedRounds.length; i++) {
       const round = sortedRounds[i];
       const holesMap = new Map<number, PuttingAttempt[]>();
@@ -196,23 +198,21 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
         }
       });
 
-      // If no holes have holeNumber data, use round.holesPlayed as fallback
-      const holesPlayed = holesMap.size > 0 ? holesMap.size : round.holesPlayed;
+      // Get sorted hole numbers (ascending for forward traversal)
+      const holeNumbers = Array.from(holesMap.keys()).sort((a, b) => a - b);
 
-      // Only check for three-putts if we have hole-level data
-      let hasThreePutt = false;
-      if (holesMap.size > 0) {
-        holesMap.forEach(holePutts => {
-          const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
-          if (puttCount >= 3) hasThreePutt = true;
-        });
-      }
+      // Process holes in order
+      for (const holeNumber of holeNumbers) {
+        const holePutts = holesMap.get(holeNumber)!;
+        const puttCount = holePutts.filter(p => p.puttNumber !== 0).length;
+        const hasThreePutt = puttCount >= 3;
 
-      if (hasThreePutt) {
-        recordStreak = Math.max(recordStreak, tempStreak);
-        tempStreak = 0;
-      } else {
-        tempStreak += holesPlayed;
+        if (hasThreePutt) {
+          recordStreak = Math.max(recordStreak, tempStreak);
+          tempStreak = 0;
+        } else {
+          tempStreak++;
+        }
       }
     }
 
