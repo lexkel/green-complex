@@ -17,7 +17,6 @@ export class DataAccess {
     }
   ): Promise<string> {
     const { id: userId } = UserIdentity.getUserId();
-    const roundId = options?.roundId || crypto.randomUUID();
     const now = new Date().toISOString();
     const createdAt = options?.createdAt || now;
     const updatedAt = options?.updatedAt || now;
@@ -33,6 +32,24 @@ export class DataAccess {
     });
 
     const holesPlayed = puttsByHole.size;
+
+    // Check for duplicate rounds (same userId, course, date, holesPlayed)
+    // This prevents creating duplicate rounds when syncing across devices
+    let roundId = options?.roundId;
+    if (!roundId) {
+      const dateOnly = createdAt.split('T')[0];
+      const existingRounds = await db.rounds
+        .where('userId').equals(userId)
+        .and(r => r.course === course && r.date.startsWith(dateOnly) && r.holesPlayed === holesPlayed)
+        .toArray();
+
+      if (existingRounds.length > 0) {
+        console.log('[DataAccess] Found existing round with same criteria, updating instead of creating new');
+        roundId = existingRounds[0].id;
+      } else {
+        roundId = crypto.randomUUID();
+      }
+    }
 
     // Count actual putts (excluding chip-ins with puttNumber === 0)
     const totalPutts = putts.filter(p => p.puttNumber !== 0).length;
