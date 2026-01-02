@@ -40,12 +40,15 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     const madePutts = round.putts.filter(p => p.made);
     const totalMadeDistance = madePutts.reduce((sum, p) => sum + p.distance, 0);
 
+    // Scale distance to 18-hole equivalent
+    const scaledMadeDistance = round.holesPlayed > 0 ? (totalMadeDistance / round.holesPlayed) * 18 : totalMadeDistance;
+
     return {
       roundNumber: rounds.length - index,
       totalPutts: round.totalPutts,
       avgPutts: round.holesPlayed > 0 ? round.totalPutts / round.holesPlayed : 0,
       timestamp: round.timestamp,
-      totalMadeDistance,
+      totalMadeDistance: scaledMadeDistance,
     };
   }).reverse();
 
