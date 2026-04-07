@@ -22,6 +22,7 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   const [rounds, setRounds] = useState<SavedRound[]>([]);
   const [showFirstPuttsOnly, setShowFirstPuttsOnly] = useState(false);
   const [missDistanceFilter, setMissDistanceFilter] = useState<'all' | 'short' | 'medium' | 'long'>('all');
+  const [excludeTapIns, setExcludeTapIns] = useState(true);
 
   useEffect(() => {
     RoundHistory.getRounds().then(setRounds);
@@ -422,6 +423,62 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     left: totalMisses > 0 ? (missDirections.left / totalMisses) * 100 : 0,
     right: totalMisses > 0 ? (missDirections.right / totalMisses) * 100 : 0,
   };
+
+  // Putt read breakdown calculations
+  const annotatedPutts = putts.filter(p =>
+    p.puttRead && p.puttBreak && p.puttSlope &&
+    (!excludeTapIns || p.distance >= 0.5)
+  );
+
+  const readLabels = { over: 'Over', good: 'Good', under: 'Under' } as const;
+  const readColors = { over: '#8b5cf6', good: '#4ade80', under: '#3b82f6' } as const;
+
+  const breakGroups = [
+    { key: 'left-to-right' as const, label: 'L→R' },
+    { key: 'straight' as const,      label: 'Straight' },
+    { key: 'right-to-left' as const, label: 'R→L' },
+  ];
+  const slopeGroups = [
+    { key: 'uphill' as const,   label: 'Uphill' },
+    { key: 'flat' as const,     label: 'Flat' },
+    { key: 'downhill' as const, label: 'Downhill' },
+  ];
+
+  const readByBreak = breakGroups.map(({ key, label }) => {
+    const group = annotatedPutts.filter(p => p.puttBreak === key);
+    const total = group.length;
+    return {
+      label,
+      total,
+      over:  total > 0 ? group.filter(p => p.puttRead === 'over').length / total * 100 : 0,
+      good:  total > 0 ? group.filter(p => p.puttRead === 'good').length / total * 100 : 0,
+      under: total > 0 ? group.filter(p => p.puttRead === 'under').length / total * 100 : 0,
+    };
+  });
+
+  const readBySlope = slopeGroups.map(({ key, label }) => {
+    const group = annotatedPutts.filter(p => p.puttSlope === key);
+    const total = group.length;
+    return {
+      label,
+      total,
+      over:  total > 0 ? group.filter(p => p.puttRead === 'over').length / total * 100 : 0,
+      good:  total > 0 ? group.filter(p => p.puttRead === 'good').length / total * 100 : 0,
+      under: total > 0 ? group.filter(p => p.puttRead === 'under').length / total * 100 : 0,
+    };
+  });
+
+  const readByDistance = distanceRanges.map(range => {
+    const group = annotatedPutts.filter(p => p.distance >= range.min && p.distance < range.max);
+    const total = group.length;
+    return {
+      label: range.label,
+      total,
+      over:  total > 0 ? group.filter(p => p.puttRead === 'over').length / total * 100 : 0,
+      good:  total > 0 ? group.filter(p => p.puttRead === 'good').length / total * 100 : 0,
+      under: total > 0 ? group.filter(p => p.puttRead === 'under').length / total * 100 : 0,
+    };
+  });
 
   return (
     <div className="stats-display-modern">
@@ -1116,6 +1173,120 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
                 );
               })}
             </svg>
+          </div>
+        </div>
+      )}
+
+      {/* Putt Read Breakdown by Break & Slope */}
+      {annotatedPutts.length > 0 && (
+        <div className="stats-section-modern">
+          <div className="stats-section-header">
+            <h3>Read Accuracy</h3>
+            <button
+              onClick={() => setExcludeTapIns(v => !v)}
+              style={{
+                padding: '0.25rem 0.75rem',
+                background: excludeTapIns ? 'rgba(74, 222, 128, 0.2)' : 'transparent',
+                color: excludeTapIns ? '#4ade80' : 'var(--color-text-secondary)',
+                border: '1px solid',
+                borderColor: excludeTapIns ? '#4ade80' : 'var(--color-border)',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                transition: 'all 0.2s',
+              }}
+            >
+              Excl. tap-ins
+            </button>
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+            {(['over', 'good', 'under'] as const).map(k => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: readColors[k], flexShrink: 0 }} />
+                {readLabels[k]}
+              </div>
+            ))}
+          </div>
+
+          {/* By Break */}
+          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>BY BREAK</div>
+          <div className="make-probability-list" style={{ marginBottom: '1rem' }}>
+            {readByBreak.map((row, i) => (
+              <div key={i} className="make-probability-row">
+                <div className="make-probability-label">{row.label}</div>
+                <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
+                  {row.total > 0 ? (
+                    <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                      <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
+                      <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
+                      <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="make-probability-percentage">
+                  {row.total > 0 ? `${row.total}` : '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* By Slope */}
+          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>BY SLOPE</div>
+          <div className="make-probability-list">
+            {readBySlope.map((row, i) => (
+              <div key={i} className="make-probability-row">
+                <div className="make-probability-label">{row.label}</div>
+                <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
+                  {row.total > 0 ? (
+                    <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                      <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
+                      <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
+                      <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="make-probability-percentage">
+                  {row.total > 0 ? `${row.total}` : '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Putt Read Breakdown by Distance */}
+      {annotatedPutts.length > 0 && (
+        <div className="stats-section-modern">
+          <div className="stats-section-header">
+            <h3>Read Accuracy by Distance</h3>
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+            {(['over', 'good', 'under'] as const).map(k => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: readColors[k], flexShrink: 0 }} />
+                {readLabels[k]}
+              </div>
+            ))}
+          </div>
+
+          <div className="make-probability-list">
+            {readByDistance.filter(row => row.total > 0).map((row, i) => (
+              <div key={i} className="make-probability-row">
+                <div className="make-probability-label">{row.label}</div>
+                <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
+                  <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                    <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
+                    <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
+                    <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+                <div className="make-probability-percentage">{row.total}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
