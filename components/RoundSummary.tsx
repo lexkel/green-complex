@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { PuttingAttempt } from '@/types';
-import { Check, Edit3, Award, CircleX, RedoDot, Ruler, Crosshair, UnfoldVertical } from 'lucide-react';
+import { Check, Edit3, Award, CircleX, RedoDot, Ruler, Crosshair, UnfoldVertical, Target, Star } from 'lucide-react';
 import { RoundHistory, SavedRound } from '@/lib/roundHistory';
 
 interface RoundSummaryProps {
@@ -28,7 +28,7 @@ interface ComparisonMetrics {
   totalPutts: { current: number; avg: number; delta: number };
   totalPutts18: { current: number; avg: number; delta: number };
   avgPerHole: { current: number; avg: number; delta: number };
-  avgMakeDist: { current: number; avg: number; delta: number };
+  totalMakeDist: { current: number; avg: number; delta: number };
   onePutts: { current: number; avg: number; delta: number };
   twoPutts: { current: number; avg: number; delta: number };
   threePutts: { current: number; avg: number; delta: number };
@@ -109,8 +109,10 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
   type KeySignal =
     | { type: 'long-make'; distance: number }
     | { type: 'short-miss'; distance: number }
-    | { type: 'poor-speed'; startDistance: number; endDistance: number }
     | { type: 'missed-opportunity'; distance: number }
+    | { type: 'critical-make'; distance: number }
+    | { type: 'nice-bonus'; distance: number }
+    | { type: 'poor-speed'; startDistance: number; endDistance: number }
     | { type: 'great-lag'; firstPuttDistance: number; endProximity: number }
     | { type: 'great-approach'; distance: number };
 
@@ -127,20 +129,40 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
     const sortedPutts = [...holePutts].sort((a, b) => (a.puttNumber || 0) - (b.puttNumber || 0));
     const firstPutt = sortedPutts[0];
 
-    // Priority 1: Long make (≥ 5m)
-    const longMakes = holePutts.filter(p => p.made && p.distance >= 5);
+    // Priority 1: Long make (≥ 6m)
+    const longMakes = holePutts.filter(p => p.made && p.distance >= 6);
     if (longMakes.length > 0) {
       const longest = longMakes.reduce((max, p) => p.distance > max.distance ? p : max);
       return { type: 'long-make', distance: longest.distance };
     }
 
-    // Priority 2: Short miss (< 2m)
-    const shortMiss = holePutts.find(p => !p.made && p.distance < 2);
+    // Priority 2: Short miss (< 1.5m)
+    const shortMiss = holePutts.find(p => !p.made && p.distance < 1.5);
     if (shortMiss) {
       return { type: 'short-miss', distance: shortMiss.distance };
     }
 
-    // Priority 3: Poor speed (first putt ≥ 10m, left > 3m)
+    // Priority 3: Missed opportunity (missed putt 1.5–3m)
+    const missedOpp = holePutts.find(p => !p.made && p.distance >= 1.5 && p.distance <= 3);
+    if (missedOpp) {
+      return { type: 'missed-opportunity', distance: missedOpp.distance };
+    }
+
+    // Priority 4: Critical make (made putt 1.5–3m)
+    const criticalMakes = holePutts.filter(p => p.made && p.distance >= 1.5 && p.distance <= 3);
+    if (criticalMakes.length > 0) {
+      const longest = criticalMakes.reduce((max, p) => p.distance > max.distance ? p : max);
+      return { type: 'critical-make', distance: longest.distance };
+    }
+
+    // Priority 5: Nice bonus (made putt 3–6m)
+    const niceBonusMakes = holePutts.filter(p => p.made && p.distance > 3 && p.distance < 6);
+    if (niceBonusMakes.length > 0) {
+      const longest = niceBonusMakes.reduce((max, p) => p.distance > max.distance ? p : max);
+      return { type: 'nice-bonus', distance: longest.distance };
+    }
+
+    // Priority 6: Poor speed (first putt ≥ 10m, left > 3m)
     if (firstPutt && firstPutt.distance >= 10 && !firstPutt.made && sortedPutts.length >= 2) {
       const secondPutt = sortedPutts[1];
       if (secondPutt && secondPutt.distance > 3) {
@@ -148,22 +170,15 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
       }
     }
 
-    // Priority 4: Missed opportunity (missed putt 3-5m)
-    const missedOpp = holePutts.find(p => !p.made && p.distance >= 3 && p.distance <= 5);
-    if (missedOpp) {
-      return { type: 'missed-opportunity', distance: missedOpp.distance };
-    }
-
-    // Priority 5: Great lag (first putt ≥ 15m, left < 2m)
+    // Priority 7: Great lag (first putt ≥ 15m, left < 2m)
     if (firstPutt && firstPutt.distance >= 15 && !firstPutt.made && sortedPutts.length >= 2) {
-      // The second putt's distance tells us how close the first putt left it
       const secondPutt = sortedPutts[1];
       if (secondPutt && secondPutt.distance < 2) {
         return { type: 'great-lag', firstPuttDistance: firstPutt.distance, endProximity: secondPutt.distance };
       }
     }
 
-    // Priority 6: Great approach (first putt ≤ 1m - tap-in range)
+    // Priority 8: Great approach (first putt ≤ 1m - tap-in range)
     if (firstPutt && firstPutt.distance <= 1) {
       return { type: 'great-approach', distance: firstPutt.distance };
     }
@@ -179,6 +194,10 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
         return 'Long make';
       case 'short-miss':
         return 'Short miss';
+      case 'critical-make':
+        return 'Critical make';
+      case 'nice-bonus':
+        return 'Nice bonus';
       case 'poor-speed':
         return 'Poor speed';
       case 'missed-opportunity':
@@ -241,10 +260,7 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
   const holedPutts = putts.filter(p => p.made && p.puttNumber !== 0);
   const totalHoledDistance = holedPutts.reduce((sum, p) => sum + p.distance, 0);
 
-  // Calculate average distance of holed putts (the last putt on every hole, excluding chip-ins)
-  const avgHoledDistance = holedPutts.length > 0 ? (totalHoledDistance / holedPutts.length) : 0;
-
-  // Count putts by category
+// Count putts by category
   let chipIns = 0;
   let onePutts = 0;
   let twoPutts = 0;
@@ -285,7 +301,7 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
     const currentTotalPutts = totalPutts;
     const currentTotalPutts18 = holesPlayed > 0 ? (totalPutts / holesPlayed) * 18 : 0;
     const currentAvgPerHole = avgPuttsPerHole;
-    const currentAvgMakeDist = avgHoledDistance;
+    const currentTotalMakeDist = totalHoledDistance;
 
     // Calculate last 5 rounds putt breakdown (normalized to 18 holes)
     const last5BreakdownData = last5Rounds.map(r => {
@@ -333,9 +349,11 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
       .map(r => r.holesPlayed > 0 ? r.totalPutts / r.holesPlayed : 0)
       .reduce((sum, val) => sum + val, 0) / last5Rounds.length;
 
-    const last5MadePutts = last5Rounds.flatMap(r => r.putts?.filter(p => p.made && p.puttNumber !== 0) || []);
-    const last5AvgMakeDist = last5MadePutts.length > 0
-      ? last5MadePutts.reduce((sum, p) => sum + p.distance, 0) / last5MadePutts.length
+    const last5AvgTotalMakeDist = last5Rounds.length > 0
+      ? last5Rounds.reduce((sum, r) => {
+          const madePutts = r.putts?.filter(p => p.made && p.puttNumber !== 0) || [];
+          return sum + madePutts.reduce((s, p) => s + p.distance, 0);
+        }, 0) / last5Rounds.length
       : 0;
 
     const last5AvgOnePutts = last5BreakdownData.reduce((sum, d) => sum + d.onePutts, 0) / last5Rounds.length;
@@ -364,10 +382,10 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
         avg: last5AvgPerHole,
         delta: currentAvgPerHole - last5AvgPerHole,
       },
-      avgMakeDist: {
-        current: currentAvgMakeDist,
-        avg: last5AvgMakeDist,
-        delta: currentAvgMakeDist - last5AvgMakeDist,
+      totalMakeDist: {
+        current: currentTotalMakeDist,
+        avg: last5AvgTotalMakeDist,
+        delta: currentTotalMakeDist - last5AvgTotalMakeDist,
       },
       onePutts: {
         current: currentOnePutts18,
@@ -573,15 +591,15 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
             )}
           </div>
           <div className="round-summary-stat-card">
-            <div className="round-summary-stat-value">{avgHoledDistance.toFixed(1)}m</div>
-            <div className="round-summary-stat-label">Avg dist holed</div>
+            <div className="round-summary-stat-value">{totalHoledDistance.toFixed(1)}m</div>
+            <div className="round-summary-stat-label">Total dist holed</div>
             {comparison && (
               <div style={{
                 fontSize: '0.75rem',
                 color: '#9ca3af',
                 marginTop: '4px'
               }}>
-                {comparison.avgMakeDist.delta > 0 ? '▲' : comparison.avgMakeDist.delta < 0 ? '▼' : '—'} {Math.abs(comparison.avgMakeDist.delta).toFixed(1)}m
+                {comparison.totalMakeDist.delta > 0 ? '▲' : comparison.totalMakeDist.delta < 0 ? '▼' : '—'} {Math.abs(comparison.totalMakeDist.delta).toFixed(1)}m
               </div>
             )}
           </div>
@@ -749,6 +767,8 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
                         }}>
                           {keySignal.type === 'long-make' && <Award size={16} strokeWidth={2} />}
                           {keySignal.type === 'short-miss' && <CircleX size={16} strokeWidth={2} />}
+                          {keySignal.type === 'critical-make' && <Target size={16} strokeWidth={2} />}
+                          {keySignal.type === 'nice-bonus' && <Star size={16} strokeWidth={2} />}
                           {keySignal.type === 'poor-speed' && <UnfoldVertical size={16} strokeWidth={2} />}
                           {keySignal.type === 'missed-opportunity' && <RedoDot size={16} strokeWidth={2} />}
                           {keySignal.type === 'great-lag' && <Ruler size={16} strokeWidth={2} />}
