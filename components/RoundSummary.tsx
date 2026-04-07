@@ -657,48 +657,42 @@ export function RoundSummary({ putts, courseName, date, onDone, onEditMetadata, 
               </div>
             )}
             {onePutts > 0 && (
-              <div className="round-summary-breakdown-legend-item" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <div className="round-summary-breakdown-legend-dot one-putt"></div>
-                <span>1 Putt ({onePutts})</span>
-                {comparison && (
-                  <span style={{
-                    fontSize: '0.7rem',
-                    color: '#9ca3af',
-                    marginLeft: '4px'
-                  }}>
-                    {comparison.onePutts.delta > 0 ? '▲' : comparison.onePutts.delta < 0 ? '▼' : '—'} {Math.abs(comparison.onePutts.delta).toFixed(1)}
-                  </span>
-                )}
+              <div className="round-summary-breakdown-legend-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                <div className="round-summary-breakdown-legend-dot one-putt" style={{ marginTop: '2px' }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>1 Putt ({onePutts})</span>
+                  {comparison && (
+                    <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                      {comparison.onePutts.delta > 0 ? '▲' : comparison.onePutts.delta < 0 ? '▼' : '—'} {Math.abs(comparison.onePutts.delta).toFixed(1)}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             {twoPutts > 0 && (
-              <div className="round-summary-breakdown-legend-item" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <div className="round-summary-breakdown-legend-dot two-putts"></div>
-                <span>2 Putts ({twoPutts})</span>
-                {comparison && (
-                  <span style={{
-                    fontSize: '0.7rem',
-                    color: '#9ca3af',
-                    marginLeft: '4px'
-                  }}>
-                    {comparison.twoPutts.delta < 0 ? '▼' : comparison.twoPutts.delta > 0 ? '▲' : '—'} {Math.abs(comparison.twoPutts.delta).toFixed(1)}
-                  </span>
-                )}
+              <div className="round-summary-breakdown-legend-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                <div className="round-summary-breakdown-legend-dot two-putts" style={{ marginTop: '2px' }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>2 Putts ({twoPutts})</span>
+                  {comparison && (
+                    <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                      {comparison.twoPutts.delta < 0 ? '▼' : comparison.twoPutts.delta > 0 ? '▲' : '—'} {Math.abs(comparison.twoPutts.delta).toFixed(1)}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             {threePlusPutts > 0 && (
-              <div className="round-summary-breakdown-legend-item" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <div className="round-summary-breakdown-legend-dot three-plus-putts"></div>
-                <span>3+ Putts ({threePlusPutts})</span>
-                {comparison && (
-                  <span style={{
-                    fontSize: '0.7rem',
-                    color: '#9ca3af',
-                    marginLeft: '4px'
-                  }}>
-                    {comparison.threePutts.delta < 0 ? '▼' : comparison.threePutts.delta > 0 ? '▲' : '—'} {Math.abs(comparison.threePutts.delta).toFixed(1)}
-                  </span>
-                )}
+              <div className="round-summary-breakdown-legend-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                <div className="round-summary-breakdown-legend-dot three-plus-putts" style={{ marginTop: '2px' }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>3+ Putts ({threePlusPutts})</span>
+                  {comparison && (
+                    <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                      {comparison.threePutts.delta < 0 ? '▼' : comparison.threePutts.delta > 0 ? '▲' : '—'} {Math.abs(comparison.threePutts.delta).toFixed(1)}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>

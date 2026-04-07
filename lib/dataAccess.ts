@@ -112,6 +112,9 @@ export class DataAccess {
           pinPositionX: putt.pinPosition?.x,
           pinPositionY: putt.pinPosition?.y,
           missDirection: putt.missDirection,
+          puttRead: putt.puttRead,
+          puttBreak: putt.puttBreak,
+          puttSlope: putt.puttSlope,
           courseName: putt.course || course,
           holeNumber: putt.holeNumber || holeNumber,
           recordedAt: putt.timestamp || createdAt,
@@ -184,6 +187,9 @@ export class DataAccess {
       holeNumber: p.holeNumber,
       course: p.courseName,
       missDirection: p.missDirection,
+      puttRead: p.puttRead,
+      puttBreak: p.puttBreak,
+      puttSlope: p.puttSlope,
     }));
   }
 
@@ -314,6 +320,9 @@ export class DataAccess {
             pinPositionX: putt.pinPosition?.x,
             pinPositionY: putt.pinPosition?.y,
             missDirection: putt.missDirection,
+            puttRead: putt.puttRead,
+            puttBreak: putt.puttBreak,
+            puttSlope: putt.puttSlope,
             courseName: putt.course || (options?.course || existingRound.course),
             holeNumber: putt.holeNumber || holeNumber,
             recordedAt: putt.timestamp || existingRound.createdAt,

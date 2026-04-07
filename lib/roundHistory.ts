@@ -79,6 +79,9 @@ export class RoundHistory {
             holeNumber: resolvedHoleNumber,
             course: p.courseName,
             missDirection: p.missDirection,
+            puttRead: p.puttRead,
+            puttBreak: p.puttBreak,
+            puttSlope: p.puttSlope,
           };
         });
 
