@@ -64,6 +64,9 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   // Per-putt annotation step: 'read' | 'break' | 'slope' | 'done', indexed by puttHistory index
   const [puttAnnotationSteps, setPuttAnnotationSteps] = useState<('read' | 'break' | 'slope' | 'done')[]>([]);
 
+  // Index of putt whose completed annotation is being edited (null = not editing)
+  const [editingAnnotationIdx, setEditingAnnotationIdx] = useState<number | null>(null);
+
   // Store hole states for navigation
   const [holeStates, setHoleStates] = useState<Map<number, HoleState>>(new Map());
 
@@ -1320,6 +1323,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     setCanvasZoom(2.2);
     setViewBoxOffset({ x: 0, y: 0 });
     setPuttAnnotationSteps([]);
+    setEditingAnnotationIdx(null);
     // Don't clear pendingPutts here - they persist across holes until round is saved
   };
 
@@ -1353,6 +1357,19 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     ));
 
     advancePuttAnnotation(puttIdx, step);
+  };
+
+  const handleAnnotationEditSelect = (puttIdx: number, field: 'puttRead' | 'puttBreak' | 'puttSlope', value: string) => {
+    const updatedHistory = [...puttHistory];
+    const putt = updatedHistory[puttIdx];
+    updatedHistory[puttIdx] = { ...putt, [field]: value };
+    setPuttHistory(updatedHistory);
+
+    setPendingPutts(pendingPutts.map(p =>
+      p.puttNumber === putt.puttNum && p.holeNumber === hole
+        ? { ...p, [field]: value }
+        : p
+    ));
   };
 
   const formatAnnotationSummary = (putt: typeof puttHistory[0]): string => {
@@ -2200,7 +2217,13 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                       </span>
                     </div>
                     {annotationSummary && (
-                      <div className="putt-annotation-summary">{annotationSummary}</div>
+                      <div
+                        className="putt-annotation-summary"
+                        style={!isViewOnly ? { cursor: 'pointer', textDecoration: 'underline dotted' } : undefined}
+                        onClick={!isViewOnly ? () => setEditingAnnotationIdx(editingAnnotationIdx === idx ? null : idx) : undefined}
+                      >
+                        {annotationSummary}
+                      </div>
                     )}
                   </div>
                   {!isViewOnly && isComplete && !isDone && step && (
@@ -2221,7 +2244,6 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                             <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttBreak', 'left-to-right', 'break')}>L→R</button>
                             <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttBreak', 'straight', 'break')}>Straight</button>
                             <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttBreak', 'right-to-left', 'break')}>R→L</button>
-                            
                           </>
                         )}
                         {step === 'slope' && (
@@ -2231,6 +2253,48 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
                             <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttSlope', 'downhill', 'slope')}>Downhill</button>
                           </>
                         )}
+                      </div>
+                    </div>
+                  )}
+                  {!isViewOnly && isDone && editingAnnotationIdx === idx && (
+                    <div className="putt-annotation-seq" style={{ gap: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {(['over', 'good', 'under'] as const).map(v => (
+                            <button
+                              key={v}
+                              className="putt-annotation-btn"
+                              style={putt.puttRead === v ? { background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' } : undefined}
+                              onClick={() => handleAnnotationEditSelect(idx, 'puttRead', v)}
+                            >
+                              {v === 'over' ? 'Over' : v === 'good' ? 'Good' : 'Under'}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {(['left-to-right', 'straight', 'right-to-left'] as const).map(v => (
+                            <button
+                              key={v}
+                              className="putt-annotation-btn"
+                              style={putt.puttBreak === v ? { background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' } : undefined}
+                              onClick={() => handleAnnotationEditSelect(idx, 'puttBreak', v)}
+                            >
+                              {v === 'left-to-right' ? 'L→R' : v === 'straight' ? 'Straight' : 'R→L'}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {(['uphill', 'flat', 'downhill'] as const).map(v => (
+                            <button
+                              key={v}
+                              className="putt-annotation-btn"
+                              style={putt.puttSlope === v ? { background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' } : undefined}
+                              onClick={() => handleAnnotationEditSelect(idx, 'puttSlope', v)}
+                            >
+                              {v === 'uphill' ? 'Uphill' : v === 'flat' ? 'Flat' : 'Downhill'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
