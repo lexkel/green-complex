@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Flag, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Flag, Trash2, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Home } from 'lucide-react';
 import { PuttingAttempt } from '@/types';
 import { NEANGAR_PARK, COURSES, getHoleData, GreenShape, HoleData, CourseData } from '@/data/courses';
 import { RoundHistory } from '@/lib/roundHistory';
@@ -20,6 +20,7 @@ interface PuttEntryProps {
   courseId?: string; // Course ID to use for this round
   isEditingRound?: boolean; // True when editing an existing round (prevents duplicate saves)
   isViewOnly?: boolean; // True when viewing a historical round (read-only, no edits allowed)
+  editingRoundId?: string; // The ID of the round being edited (stored in active round for session restore)
 }
 
 interface Position {
@@ -29,7 +30,7 @@ interface Position {
 
 interface HoleState {
   hole: number;
-  puttHistory: Array<{puttNum: number, distance: number, startProximity: any, endProximity: any, endDistance: number, made?: boolean}>;
+  puttHistory: Array<{puttNum: number, distance: number, startProximity: any, endProximity: any, endDistance: number, made?: boolean, puttRead?: 'over' | 'good' | 'under', puttBreak?: 'right-to-left' | 'straight' | 'left-to-right', puttSlope?: 'uphill' | 'flat' | 'downhill'}>;
   pinPosition: Position;
   ballPosition: Position | null;
   distance: number;
@@ -44,7 +45,7 @@ interface HoleState {
 }
 
 
-export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId, isEditingRound, isViewOnly = false }: PuttEntryProps) {
+export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComplete, resetRound, onNavigationAttempt, onDiscardRound, courseId: propCourseId, isEditingRound, isViewOnly = false, editingRoundId }: PuttEntryProps) {
   const [hasRestoredFromStorage, setHasRestoredFromStorage] = useState(false);
   const [pinPosition, setPinPosition] = useState<Position>({ x: 50, y: 50 });
   const [ballPosition, setBallPosition] = useState<Position | null>(null);
@@ -58,7 +59,10 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
   const [puttNumber, setPuttNumber] = useState(1);
   const [hole, setHole] = useState(1);
   const [courseId, setCourseId] = useState(propCourseId || 'neangar-park');
-  const [puttHistory, setPuttHistory] = useState<Array<{puttNum: number, distance: number, startProximity: any, endProximity: any, endDistance: number, made?: boolean}>>([]);
+  const [puttHistory, setPuttHistory] = useState<Array<{puttNum: number, distance: number, startProximity: any, endProximity: any, endDistance: number, made?: boolean, puttRead?: 'over' | 'good' | 'under', puttBreak?: 'left-to-right' | 'straight' | 'right-to-left', puttSlope?: 'uphill' | 'flat' | 'downhill'}>>([]);
+
+  // Per-putt annotation step: 'read' | 'break' | 'slope' | 'done', indexed by puttHistory index
+  const [puttAnnotationSteps, setPuttAnnotationSteps] = useState<('read' | 'break' | 'slope' | 'done')[]>([]);
 
   // Store hole states for navigation
   const [holeStates, setHoleStates] = useState<Map<number, HoleState>>(new Map());
@@ -147,6 +151,9 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     // Don't auto-save until we've attempted restoration to avoid clearing saved data
     if (!hasRestoredFromStorage) return;
 
+    // Don't auto-save in view-only mode — we don't want stale "active round" data persisting
+    if (isViewOnly) return;
+
     if (pendingPutts.length > 0) {
       // Convert Map to Record for JSON serialization
       const holeStatesRecord: Record<number, HoleState> = {};
@@ -174,6 +181,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         lastCompletedHole: lastCompletedHole,
         pendingPutts: pendingPutts,
         holeStates: holeStatesRecord,
+        mode: isEditingRound ? 'editing' : 'active',
+        editingRoundId: editingRoundId,
       };
 
       ActiveRoundStorage.saveActiveRound(activeRoundData);
@@ -250,6 +259,25 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
         if (currentHoleState.puttHistory.length > 0) {
           setIsAdjustingPin(false);
         }
+
+        // Initialize annotation steps so putts missing read/break/slope show the annotation UI
+        const steps: ('read' | 'break' | 'slope' | 'done')[] = currentHoleState.puttHistory.map(putt => {
+          const isChipIn = putt.puttNum === 0;
+          const isComplete = !isChipIn && putt.endProximity !== null;
+          if (!isComplete) return 'done';
+
+          if (putt.made) {
+            if (!putt.puttBreak) return 'break';
+            if (!putt.puttSlope) return 'slope';
+            return 'done';
+          } else {
+            if (!putt.puttRead) return 'read';
+            if (!putt.puttBreak) return 'break';
+            if (!putt.puttSlope) return 'slope';
+            return 'done';
+          }
+        });
+        setPuttAnnotationSteps(steps);
       } else {
         console.log('[RESTORE] No hole state found for hole', savedRound.currentHole);
       }
@@ -381,6 +409,35 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       horizontal: dx * metersPerUnit,
       vertical: dy * metersPerUnit,
     };
+  };
+
+  const handleNudge = (direction: 'up' | 'down' | 'left' | 'right') => {
+    // 0.1m in SVG units, using the same proximity scale (metersPerUnit = canvasZoom / 5)
+    const nudgeSvg = 0.1 / (canvasZoom / 5);
+    const dx = direction === 'left' ? -nudgeSvg : direction === 'right' ? nudgeSvg : 0;
+    const dy = direction === 'up' ? -nudgeSvg : direction === 'down' ? nudgeSvg : 0;
+
+    if (ballPosition !== null) {
+      const newBallPos = { x: ballPosition.x + dx, y: ballPosition.y + dy };
+      setBallPosition(newBallPos);
+      const newDist = calculateDistance(pinPosition, newBallPos);
+      const roundedDist = parseFloat(newDist.toFixed(1));
+      setDistance(roundedDist);
+      setDistanceInputValue(roundedDist.toFixed(1));
+      // Update partial puttHistory entry if present
+      if (puttHistory.length > 0) {
+        const lastPutt = puttHistory[puttHistory.length - 1];
+        if (lastPutt.endProximity === null) {
+          const newStartProximity = calculateProximity(pinPosition, newBallPos);
+          const updatedHistory = [...puttHistory];
+          updatedHistory[updatedHistory.length - 1] = { ...lastPutt, distance: roundedDist, startProximity: newStartProximity };
+          setPuttHistory(updatedHistory);
+        }
+      }
+    } else if (!isAdjustingPin) {
+      const newPinPos = { x: pinPosition.x + dx, y: pinPosition.y + dy };
+      setPinPosition(newPinPos);
+    }
   };
 
   const proximityToPosition = (proximity: any): Position => {
@@ -720,7 +777,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       endDistance,
     };
 
-    setPuttHistory(updatedHistory);
+    // Missed putt: start annotation at READ
+    setPuttAnnotationSteps(prev => { const s = [...prev]; s[lastPuttIndex] = 'read'; return s; });
 
     // Move to next putt - ball stays at end position, create new partial entry
     setPuttNumber(puttNumber + 1);
@@ -754,7 +812,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     if (currentPixelDistance === 0) return; // Prevent division by zero
 
     // Convert target distance to pixels based on canvas zoom
-    const metersPerPixel = canvasZoom / 5;
+    const metersPerPixel = canvasZoom / 6.214;
     const targetPixelDistance = targetDistance / metersPerPixel;
 
     // Move ball along the same line to the new distance
@@ -849,6 +907,8 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       };
 
       setPuttHistory(updatedHistory);
+      // Made putt: skip READ (ball went in), start at BREAK
+      setPuttAnnotationSteps(prev => { const s = [...prev]; s[lastPuttIndex] = 'break'; return s; });
 
       setHoleComplete(true);
       setPuttStartProximity(null);
@@ -1211,6 +1271,29 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       if (savedState.puttHistory.length > 0) {
         setIsAdjustingPin(false);
       }
+
+      // Initialize annotation steps based on existing annotation data so putts
+      // missing read/break/slope show the annotation UI when navigating back
+      const steps: ('read' | 'break' | 'slope' | 'done')[] = savedState.puttHistory.map(putt => {
+        const isChipIn = putt.puttNum === 0;
+        const isComplete = !isChipIn && putt.endProximity !== null;
+        if (!isComplete) return 'done';
+
+        if (putt.made) {
+          // Made putts skip 'read' (ball went in)
+          if (!putt.puttBreak) return 'break';
+          if (!putt.puttSlope) return 'slope';
+          return 'done';
+        } else {
+          // Missed putts
+          if (!putt.puttRead) return 'read';
+          if (!putt.puttBreak) return 'break';
+          if (!putt.puttSlope) return 'slope';
+          return 'done';
+        }
+      });
+      setPuttAnnotationSteps(steps);
+
       // Don't restore pendingPutts - they're accumulated across all holes
     } else {
       // No saved state, reset to defaults
@@ -1236,6 +1319,7 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     setIsAdjustingGreen(false);
     setCanvasZoom(2.2);
     setViewBoxOffset({ x: 0, y: 0 });
+    setPuttAnnotationSteps([]);
     // Don't clear pendingPutts here - they persist across holes until round is saved
   };
 
@@ -1249,6 +1333,34 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
     const newHoleStates = new Map(holeStates);
     newHoleStates.delete(hole);
     setHoleStates(newHoleStates);
+  };
+
+  const advancePuttAnnotation = (puttIdx: number, currentStep: 'read' | 'break' | 'slope') => {
+    const next = currentStep === 'read' ? 'break' : currentStep === 'break' ? 'slope' : 'done';
+    setPuttAnnotationSteps(prev => { const s = [...prev]; s[puttIdx] = next; return s; });
+  };
+
+  const handleAnnotationSelect = (puttIdx: number, field: 'puttRead' | 'puttBreak' | 'puttSlope', value: string, step: 'read' | 'break' | 'slope') => {
+    const updatedHistory = [...puttHistory];
+    const putt = updatedHistory[puttIdx];
+    updatedHistory[puttIdx] = { ...putt, [field]: value };
+    setPuttHistory(updatedHistory);
+
+    setPendingPutts(pendingPutts.map(p =>
+      p.puttNumber === putt.puttNum && p.holeNumber === hole
+        ? { ...p, [field]: value }
+        : p
+    ));
+
+    advancePuttAnnotation(puttIdx, step);
+  };
+
+  const formatAnnotationSummary = (putt: typeof puttHistory[0]): string => {
+    const parts: string[] = [];
+    if (putt.puttRead) parts.push(putt.puttRead === 'over' ? 'Over read' : putt.puttRead === 'good' ? 'Good read' : 'Under read');
+    if (putt.puttBreak) parts.push(putt.puttBreak === 'right-to-left' ? 'R→L' : putt.puttBreak === 'straight' ? 'Straight' : 'L→R');
+    if (putt.puttSlope) parts.push(putt.puttSlope === 'uphill' ? 'Uphill' : putt.puttSlope === 'flat' ? 'Flat' : 'Downhill');
+    return parts.join(' · ');
   };
 
   const handleContinueToNextHole = () => {
@@ -1551,19 +1663,12 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
       {/* Compact Header */}
       <div className="compact-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button className="back-button" onClick={() => {
-            console.log('[BACK BUTTON] Clicked in PuttEntry');
-            console.log('[BACK BUTTON] isViewOnly:', isViewOnly);
-            console.log('[BACK BUTTON] isEditingRound:', isEditingRound);
-            console.log('[BACK BUTTON] onNavigationAttempt:', onNavigationAttempt);
-
+          <button className="hole-nav-btn-header" onClick={() => {
             // If viewing or editing a round, navigate back to home (which will show round summary)
             // Otherwise, navigate to home normally
             onNavigationAttempt?.('home');
           }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <Home size={18} strokeWidth={1.5} />
           </button>
           <div className="hole-info-compact">
             <span className="hole-number">Hole {hole}</span>
@@ -1694,25 +1799,64 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
               );
             }
 
-            // In edit mode, show completion-based navigation (existing behavior)
-            // Calculate which holes have been completed
+            // Determine if user is actively inputting on this hole
+            const isActivelyInputting = (ballPosition !== null) || waitingForEndPosition || (puttHistory.length > 0 && !holeComplete);
+
+            // Idle state (no input started): show simple prev/next for quick navigation
+            if (!isActivelyInputting && !holeComplete) {
+              return (
+                <>
+                  {hole > 1 && (
+                    <button
+                      className="canvas-prev-btn"
+                      onClick={handlePreviousHole}
+                      aria-label="Previous Hole"
+                    >
+                      <ChevronLeft size={32} />
+                    </button>
+                  )}
+                  {hole < 18 && (
+                    <button
+                      className="canvas-next-btn"
+                      onClick={handleNextHole}
+                      aria-label="Next Hole"
+                    >
+                      <ChevronRight size={32} />
+                    </button>
+                  )}
+                </>
+              );
+            }
+
+            // Actively inputting: hide navigation so user can focus
+            if (!holeComplete) {
+              return null;
+            }
+
+            // Hole complete - calculate completion state
             const completedHolesSet = new Set(
               Array.from(holeStates.values())
                 .filter(state => state.holeComplete)
                 .map(state => state.hole)
             );
-            // Add current hole if it's complete
-            if (holeComplete) {
-              completedHolesSet.add(hole);
-            }
-
-            // Check if all 18 holes are complete
+            completedHolesSet.add(hole);
             const allHolesComplete = completedHolesSet.size === 18;
 
-            // On hole 18 (regardless of completion): show dual buttons if not all holes complete
+            const prevBtn = hole > 1 ? (
+              <button
+                className="canvas-prev-btn"
+                onClick={handlePreviousHole}
+                aria-label="Previous Hole"
+              >
+                <ChevronLeft size={32} />
+              </button>
+            ) : null;
+
+            // Hole 18 complete, not all holes done: dual buttons + prev
             if (hole === 18 && !allHolesComplete) {
               return (
                 <>
+                  {prevBtn}
                   {/* Smaller Continue button (chevron) - positioned above */}
                   <button
                     className="canvas-next-btn-secondary"
@@ -1733,26 +1877,37 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
               );
             }
 
-            // For all other cases: only show button if hole is complete
-            if (!holeComplete) {
-              return null;
-            }
-
-            // Show single button - flag if all holes complete, chevron otherwise
+            // Show prev + single button (flag if all complete, chevron otherwise)
             return (
-              <button
-                className="canvas-next-btn"
-                onClick={allHolesComplete ? () => setShowEndRoundConfirm(true) : handleNextHole}
-                aria-label={allHolesComplete ? 'Finish Round' : 'Next Hole'}
-              >
-                {allHolesComplete ? (
-                  <Flag size={32} />
-                ) : (
-                  <ChevronRight size={32} />
-                )}
-              </button>
+              <>
+                {prevBtn}
+                <button
+                  className="canvas-next-btn"
+                  onClick={allHolesComplete ? () => setShowEndRoundConfirm(true) : handleNextHole}
+                  aria-label={allHolesComplete ? 'Finish Round' : 'Next Hole'}
+                >
+                  {allHolesComplete ? (
+                    <Flag size={32} />
+                  ) : (
+                    <ChevronRight size={32} />
+                  )}
+                </button>
+              </>
             );
           })()}
+
+          {/* Nudge Controls - bottom-left of canvas, shown when pin or ball is placed */}
+          {!isViewOnly && !holeComplete && !isAdjustingPin && !waitingForEndPosition && (
+            <div className="canvas-nudge-controls-overlay">
+              <button className="nudge-btn nudge-up" onClick={() => handleNudge('up')} aria-label="Nudge up"><ChevronUp size={18} /></button>
+              <div className="nudge-middle-row">
+                <button className="nudge-btn nudge-left" onClick={() => handleNudge('left')} aria-label="Nudge left"><ChevronLeft size={18} /></button>
+                <div className="nudge-center" />
+                <button className="nudge-btn nudge-right" onClick={() => handleNudge('right')} aria-label="Nudge right"><ChevronRight size={18} /></button>
+              </div>
+              <button className="nudge-btn nudge-down" onClick={() => handleNudge('down')} aria-label="Nudge down"><ChevronDown size={18} /></button>
+            </div>
+          )}
 
           {/* Desktop Zoom Controls - positioned top-right */}
           <div className="canvas-zoom-controls-overlay">
@@ -2020,34 +2175,64 @@ export function PuttEntry({ onAddPutt, isOnline, onRoundStateChange, onRoundComp
             </div>
           ) : (
             puttHistory.map((putt, idx) => {
-              // Calculate the start descriptor for this putt
               const startDescriptor = formatProximitySimple(putt.startProximity, putt.distance);
-
-              // Check if this is a chip-in (puttNum === 0)
               const isChipIn = putt.puttNum === 0;
+              const isComplete = !isChipIn && putt.endProximity !== null;
+              const step = puttAnnotationSteps[idx];
+              const isDone = step === 'done';
+              const annotationSummary = isDone ? formatAnnotationSummary(putt) : '';
 
               return (
                 <div key={idx} className="putt-history-item">
-                  <span className="putt-history-num">
-                    {isChipIn ? 'Chip-in:' : `Putt ${putt.puttNum}:`}
-                  </span>
-                  <span className="putt-history-desc">
-                    {isChipIn
-                      ? 'Chipped in'
-                      : putt.made
-                        ? `Holed from ${putt.distance.toFixed(1)}m`
-                        : putt.endProximity === null
-                          ? `From ${putt.distance.toFixed(1)}m ...`
-                          : `From ${startDescriptor} to ${formatMissDirection(putt.startProximity, putt.endProximity, putt.endDistance)}`}
-                  </span>
-                  {!isViewOnly && (
-                    <button
-                      className="putt-history-delete"
-                      onClick={() => handleDeletePutt(idx)}
-                      aria-label="Delete putt"
-                    >
-                      ×
-                    </button>
+                  <div className="putt-history-left">
+                    <div className="putt-history-main-row">
+                      <span className="putt-history-num">
+                        {isChipIn ? 'Chip-in:' : `Putt ${putt.puttNum}:`}
+                      </span>
+                      <span className="putt-history-desc">
+                        {isChipIn
+                          ? 'Chipped in'
+                          : putt.made
+                            ? `Holed from ${putt.distance.toFixed(1)}m`
+                            : putt.endProximity === null
+                              ? `From ${putt.distance.toFixed(1)}m ...`
+                              : `From ${startDescriptor} to ${formatMissDirection(putt.startProximity, putt.endProximity, putt.endDistance)}`}
+                      </span>
+                    </div>
+                    {annotationSummary && (
+                      <div className="putt-annotation-summary">{annotationSummary}</div>
+                    )}
+                  </div>
+                  {!isViewOnly && isComplete && !isDone && step && (
+                    <div className="putt-annotation-seq">
+                      <span className="putt-annotation-seq-label">
+                        {step === 'read' ? 'READ' : step === 'break' ? 'BREAK' : 'SLOPE'}
+                      </span>
+                      <div className="putt-annotation-seq-btns">
+                        {step === 'read' && (
+                          <>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttRead', 'over', 'read')}>Over</button>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttRead', 'good', 'read')}>Good</button>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttRead', 'under', 'read')}>Under</button>
+                          </>
+                        )}
+                        {step === 'break' && (
+                          <>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttBreak', 'left-to-right', 'break')}>L→R</button>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttBreak', 'straight', 'break')}>Straight</button>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttBreak', 'right-to-left', 'break')}>R→L</button>
+                            
+                          </>
+                        )}
+                        {step === 'slope' && (
+                          <>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttSlope', 'uphill', 'slope')}>Uphill</button>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttSlope', 'flat', 'slope')}>Flat</button>
+                            <button className="putt-annotation-btn" onClick={() => handleAnnotationSelect(idx, 'puttSlope', 'downhill', 'slope')}>Downhill</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               );

@@ -49,6 +49,7 @@ export default function Home() {
   const [showNewRoundWarning, setShowNewRoundWarning] = useState(false);
   const [pendingCourseSelection, setPendingCourseSelection] = useState<string | null>(null);
   const [activeRoundInfo, setActiveRoundInfo] = useState<{courseName: string, startTime: Date} | null>(null);
+  const [resumeEditingInfo, setResumeEditingInfo] = useState<{courseName: string, startTime: Date, editingRoundId: string} | null>(null);
   const [showRoundSummary, setShowRoundSummary] = useState(false);
   const [savedRoundData, setSavedRoundData] = useState<{putts: PuttingAttempt[], courseName: string, date: Date, roundId?: string} | null>(null);
   const [isViewingHistoricalRound, setIsViewingHistoricalRound] = useState(false);
@@ -161,9 +162,22 @@ export default function Home() {
         // Load active round summary for home screen display
         const activeRound = ActiveRoundStorage.getActiveRoundSummary();
         if (activeRound) {
-          setPendingPuttsCount(activeRound.totalPutts);
-          setHolesComplete(activeRound.holesPlayed);
-          setActiveRoundInfo({ courseName: activeRound.courseName, startTime: activeRound.startTime });
+          if (activeRound.mode === 'viewing') {
+            // User exited while viewing a historical round — clear the stale data, show nothing
+            ActiveRoundStorage.clearActiveRound();
+          } else if (activeRound.mode === 'editing' && activeRound.editingRoundId) {
+            // User exited mid-edit — show amber "Continue Editing" banner
+            setResumeEditingInfo({
+              courseName: activeRound.courseName,
+              startTime: activeRound.startTime,
+              editingRoundId: activeRound.editingRoundId,
+            });
+          } else {
+            // Active round in progress — show green banner
+            setPendingPuttsCount(activeRound.totalPutts);
+            setHolesComplete(activeRound.holesPlayed);
+            setActiveRoundInfo({ courseName: activeRound.courseName, startTime: activeRound.startTime });
+          }
         }
 
         // Load custom courses from IndexedDB
@@ -537,7 +551,7 @@ export default function Home() {
     return null;
   };
 
-  const restoreRoundForEditing = (putts: PuttingAttempt[], courseName: string, startTimestamp: string, targetHole?: number) => {
+  const restoreRoundForEditing = (putts: PuttingAttempt[], courseName: string, startTimestamp: string, targetHole?: number, mode: 'active' | 'editing' | 'viewing' = 'active', roundEditId?: string) => {
     // Group putts by hole
     const holeGroups = new Map<number, PuttingAttempt[]>();
     putts.forEach(p => {
@@ -616,6 +630,9 @@ export default function Home() {
           endProximity: putt.proximity || null,
           endDistance: endDistance,
           made: putt.made,
+          puttRead: putt.puttRead,
+          puttBreak: putt.puttBreak,
+          puttSlope: putt.puttSlope,
         };
       });
 
@@ -669,6 +686,8 @@ export default function Home() {
       lastCompletedHole: lastCompletedHole,
       pendingPutts: putts,
       holeStates: holeStatesRecord,
+      mode: mode,
+      editingRoundId: roundEditId,
     };
 
     // Save to active round storage
@@ -705,7 +724,9 @@ export default function Home() {
       savedRoundData.putts,
       savedRoundData.courseName,
       savedRoundData.date.toISOString(),
-      holeNumber
+      holeNumber,
+      'editing',
+      savedRoundData.roundId
     );
 
     // Set up getRoundDataFn immediately for edit mode (prevents race condition)
@@ -751,7 +772,9 @@ export default function Home() {
       savedRoundData.putts,
       savedRoundData.courseName,
       savedRoundData.date.toISOString(),
-      holeNumber
+      holeNumber,
+      'editing',
+      savedRoundData.roundId
     );
 
     // Set up getRoundDataFn immediately for edit mode (prevents race condition)
@@ -784,7 +807,8 @@ export default function Home() {
       savedRoundData.putts,
       savedRoundData.courseName,
       savedRoundData.date.toISOString(),
-      holeNumber
+      holeNumber,
+      'viewing'
     );
 
     // Set view-only mode
@@ -966,6 +990,28 @@ export default function Home() {
     setShowRoundSummary(true);
   };
 
+  const handleResumeEditing = () => {
+    if (!resumeEditingInfo) return;
+    const activeRound = ActiveRoundStorage.loadActiveRound();
+    if (!activeRound) return;
+
+    // Restore React state needed for editing
+    setEditingRoundId(resumeEditingInfo.editingRoundId);
+    setSavedRoundData({
+      putts: activeRound.pendingPutts,
+      courseName: activeRound.courseName,
+      date: new Date(activeRound.startTimestamp),
+      roundId: resumeEditingInfo.editingRoundId,
+    });
+    setIsViewingRoundReadOnly(false);
+
+    const courseId = getCourseIdFromName(activeRound.courseName);
+    if (courseId) setSelectedCourseId(courseId);
+
+    setResumeEditingInfo(null);
+    setActiveTab('entry');
+  };
+
   const handleStartNewRound = (courseName: string) => {
     // Check if there's an active round
     if (ActiveRoundStorage.hasActiveRound()) {
@@ -987,6 +1033,7 @@ export default function Home() {
     ActiveRoundStorage.clearActiveRound();
     setPendingPuttsCount(0);
     setHolesComplete(0);
+    setResumeEditingInfo(null);
     setResetRound(true);
     setActiveTab('entry');
     setShowNewRoundWarning(false);
@@ -1387,6 +1434,7 @@ export default function Home() {
               courseId={selectedCourseId}
               isEditingRound={!!editingRoundId}
               isViewOnly={isViewingRoundReadOnly}
+              editingRoundId={editingRoundId || undefined}
               onDiscardRound={() => {
                 setPendingPuttsCount(0);
                 setHolesComplete(0);
@@ -1542,6 +1590,45 @@ export default function Home() {
                       ActiveRoundStorage.clearActiveRound();
                       setPendingPuttsCount(0);
                       setHolesComplete(0);
+                    }}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Resume Editing Banner */}
+          {resumeEditingInfo && (
+            <>
+              <div className="home-section-header">
+                <h2 className="home-section-title">Unfinished Edit</h2>
+                <div className="home-editing-indicator"></div>
+              </div>
+
+              <div className="home-editing-round-card" onClick={handleResumeEditing}>
+                <div className="home-round-header">
+                  <div className="home-round-info">
+                    <h3>{resumeEditingInfo.courseName}</h3>
+                    <p>Last edited {getTimeAgo(resumeEditingInfo.startTime)}</p>
+                  </div>
+                </div>
+
+                <div className="home-resume-button-row">
+                  <button className="home-resume-editing-button">
+                    <span>Continue Editing</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                      <polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                  </button>
+                  <button
+                    className="home-action-button home-delete-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      ActiveRoundStorage.clearActiveRound();
+                      setResumeEditingInfo(null);
                     }}
                   >
                     <Trash2 size={18} />

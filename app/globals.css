@@ -1420,11 +1420,32 @@ button{
 
 .putt-history-item {
   display: flex;
-  gap: var(--spacing-xs);
-  padding: 4px 0;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 6px 0;
   color: var(--color-text-secondary);
   line-height: 1.4;
-  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.putt-history-item:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+.putt-history-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.putt-history-main-row {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: baseline;
 }
 
 .putt-history-num {
@@ -1461,6 +1482,53 @@ button{
 
 .putt-history-delete:active {
   transform: scale(0.95);
+}
+
+.putt-annotation-summary {
+  font-style: italic;
+  color: var(--color-text-tertiary);
+  font-size: 0.7rem;
+  margin-top: 2px;
+}
+
+.putt-annotation-seq {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.putt-annotation-seq-label {
+  font-size: 0.6rem;
+  color: var(--color-text-tertiary);
+  letter-spacing: 0.08em;
+}
+
+.putt-annotation-seq-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.putt-annotation-btn {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  width: 52px;
+  min-height: 38px;
+  text-align: center;
+}
+
+.putt-annotation-btn:active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
 }
 
 
@@ -1833,6 +1901,56 @@ button{
   transform: scale(0.95);
 }
 
+/* Nudge controls - D-pad in bottom-left of canvas */
+.canvas-nudge-controls-overlay {
+  position: absolute;
+  bottom: var(--spacing-sm);
+  left: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.nudge-middle-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nudge-center {
+  width: 40px;
+  height: 40px;
+}
+
+.nudge-btn {
+  background: rgba(26, 26, 26, 0.85);
+  color: white;
+  border: 1.5px solid rgba(107, 114, 128, 0.4);
+  border-radius: var(--radius);
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nudge-btn:hover {
+  background: rgba(42, 42, 42, 0.9);
+}
+
+.nudge-btn:active {
+  transform: scale(0.9);
+  background: rgba(60, 60, 60, 0.95);
+}
+
 .canvas-adjust-controls-overlay {
   position: absolute;
   bottom: var(--spacing-xs);
@@ -2102,6 +2220,57 @@ button{
   border-radius: 1rem;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
+}
+
+.home-editing-indicator {
+  width: 8px;
+  height: 8px;
+  background: #f59e0b;
+  border-radius: 50%;
+  position: relative;
+}
+
+.home-editing-indicator::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: #f59e0b;
+  border-radius: 50%;
+  opacity: 0.5;
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.home-editing-round-card {
+  background: rgba(23, 23, 23, 0.6);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  cursor: pointer;
+}
+
+.home-resume-editing-button {
+  flex: 1;
+  background: #f59e0b;
+  color: black;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.home-resume-editing-button:hover {
+  background: #d97706;
 }
 
 .home-round-header {
@@ -2762,28 +2931,42 @@ button{
   background: #1a1a1a;
   border-radius: 1rem;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem;
 }
 
 .round-summary-hole-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #2a2a2a;
+  padding: 0.75rem 1rem;
+  background: #1e1e1e;
+  border-radius: 0.5rem;
   position: relative;
+  transition: background 0.15s ease;
 }
 
-.round-summary-hole-item:last-child {
-  border-bottom: none;
+.round-summary-hole-item:hover {
+  background: #252525;
 }
 
 .round-summary-hole-number {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: white;
-  min-width: 60px;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
 
+.round-summary-hole-sequence {
+  font-size: 0.875rem;
+  color: white;
+  margin-top: 4px;
+}
+
+/* Legacy styles - can be removed if not used elsewhere */
 .round-summary-hole-putts {
   font-size: 0.875rem;
   color: #9ca3af;
@@ -3001,7 +3184,7 @@ button{
 }
 
 .stats-summary-value {
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: white;
   line-height: 1;

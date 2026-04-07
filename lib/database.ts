@@ -43,6 +43,9 @@ export interface Putt {
   pinPositionY?: number;
   // New metadata fields
   missDirection?: 'short' | 'long' | 'left' | 'right';
+  puttRead?: 'over' | 'good' | 'under';
+  puttBreak?: 'right-to-left' | 'straight' | 'left-to-right';
+  puttSlope?: 'uphill' | 'flat' | 'downhill';
   courseName?: string;
   holeNumber?: number;
   recordedAt?: string; // ISO timestamp when putt was recorded
@@ -107,6 +110,14 @@ export class GreenComplexDB extends Dexie {
 
     // Version 5: Add new metadata fields to putts
     this.version(5).stores({
+      rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt, deleted',
+      holes: 'id, roundId, holeNumber',
+      putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt, courseName, holeNumber, recordedAt, missDirection',
+      courses: 'id, userId, updatedAt, dirty, syncedAt, deleted',
+    });
+
+    // Version 6: Add putt annotation fields (puttRead, puttBreak, puttSlope)
+    this.version(6).stores({
       rounds: 'id, userId, date, completed, updatedAt, dirty, syncedAt, deleted',
       holes: 'id, roundId, holeNumber',
       putts: 'id, holeId, roundId, userId, made, updatedAt, dirty, syncedAt, courseName, holeNumber, recordedAt, missDirection',

@@ -32,6 +32,8 @@ export interface ActiveRoundData {
   lastCompletedHole: number;
   pendingPutts: PuttingAttempt[];
   holeStates: Record<number, HoleState>;
+  mode?: 'active' | 'editing' | 'viewing';
+  editingRoundId?: string;
 }
 
 const STORAGE_KEY = 'active_round';
@@ -81,6 +83,8 @@ export class ActiveRoundStorage {
       holesPlayed: holesWithPutts.size,
       currentHole: round.currentHole,
       lastCompletedHole: round.lastCompletedHole,
+      mode: round.mode,
+      editingRoundId: round.editingRoundId,
     };
   }
 }

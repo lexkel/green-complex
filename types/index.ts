@@ -18,6 +18,9 @@ export interface PuttingAttempt {
   notes?: string;
   missDirection?: 'short' | 'long' | 'left' | 'right';  // Miss direction for missed putts
   roundId?: string;  // Round ID to distinguish holes across different rounds
+  puttRead?: 'over' | 'good' | 'under';
+  puttBreak?: 'right-to-left' | 'straight' | 'left-to-right';
+  puttSlope?: 'uphill' | 'flat' | 'downhill';
 }
 
 export interface PuttingStats {
