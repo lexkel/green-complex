@@ -425,8 +425,12 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
   };
 
   // Putt read breakdown calculations
+  // A holed putt is treated as a 'good' read even if puttRead wasn't explicitly set
+  const resolveRead = (p: PuttingAttempt) => p.puttRead ?? (p.made ? 'good' : undefined);
+
   const annotatedPutts = putts.filter(p =>
-    p.puttRead && p.puttBreak && p.puttSlope &&
+    p.puttBreak && p.puttSlope &&
+    (p.puttRead || p.made) &&
     (!excludeTapIns || p.distance >= 0.5)
   );
 
@@ -450,9 +454,9 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     return {
       label,
       total,
-      over:  total > 0 ? group.filter(p => p.puttRead === 'over').length / total * 100 : 0,
-      good:  total > 0 ? group.filter(p => p.puttRead === 'good').length / total * 100 : 0,
-      under: total > 0 ? group.filter(p => p.puttRead === 'under').length / total * 100 : 0,
+      over:  total > 0 ? group.filter(p => resolveRead(p) === 'over').length / total * 100 : 0,
+      good:  total > 0 ? group.filter(p => resolveRead(p) === 'good').length / total * 100 : 0,
+      under: total > 0 ? group.filter(p => resolveRead(p) === 'under').length / total * 100 : 0,
     };
   });
 
@@ -462,9 +466,9 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     return {
       label,
       total,
-      over:  total > 0 ? group.filter(p => p.puttRead === 'over').length / total * 100 : 0,
-      good:  total > 0 ? group.filter(p => p.puttRead === 'good').length / total * 100 : 0,
-      under: total > 0 ? group.filter(p => p.puttRead === 'under').length / total * 100 : 0,
+      over:  total > 0 ? group.filter(p => resolveRead(p) === 'over').length / total * 100 : 0,
+      good:  total > 0 ? group.filter(p => resolveRead(p) === 'good').length / total * 100 : 0,
+      under: total > 0 ? group.filter(p => resolveRead(p) === 'under').length / total * 100 : 0,
     };
   });
 
@@ -474,9 +478,9 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
     return {
       label: range.label,
       total,
-      over:  total > 0 ? group.filter(p => p.puttRead === 'over').length / total * 100 : 0,
-      good:  total > 0 ? group.filter(p => p.puttRead === 'good').length / total * 100 : 0,
-      under: total > 0 ? group.filter(p => p.puttRead === 'under').length / total * 100 : 0,
+      over:  total > 0 ? group.filter(p => resolveRead(p) === 'over').length / total * 100 : 0,
+      good:  total > 0 ? group.filter(p => resolveRead(p) === 'good').length / total * 100 : 0,
+      under: total > 0 ? group.filter(p => resolveRead(p) === 'under').length / total * 100 : 0,
     };
   });
 
@@ -1213,45 +1217,69 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           {/* By Break */}
           <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>BY BREAK</div>
           <div className="make-probability-list" style={{ marginBottom: '1rem' }}>
-            {readByBreak.map((row, i) => (
-              <div key={i} className="make-probability-row">
-                <div className="make-probability-label">{row.label}</div>
-                <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
-                  {row.total > 0 ? (
-                    <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
-                      <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
-                      <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
-                      <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
-                    </div>
-                  ) : null}
+            {readByBreak.map((row, i) => {
+              const dominant = row.total > 0 ? dominantRead(row) : null;
+              return (
+                <div key={i} className="make-probability-row" style={{ gridTemplateColumns: '80px 1fr 80px', gap: '1.25rem' }}>
+                  <div className="make-probability-label" style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span>{row.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>n={row.total}</span>
+                  </div>
+                  <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
+                    {row.total > 0 ? (
+                      <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                        <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
+                        <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
+                        <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
+                    {dominant && <>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: readColors[dominant.key], flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1, textAlign: 'right' }}>{dominant.pct}%</div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text)', lineHeight: 1.2, textAlign: 'right' }}>{readLabels[dominant.key]}</div>
+                      </div>
+                    </>}
+                  </div>
                 </div>
-                <div className="make-probability-percentage">
-                  {row.total > 0 ? `${row.total}` : '—'}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* By Slope */}
           <div style={{ fontSize: '0.7rem', color: 'var(--color-text-tertiary)', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>BY SLOPE</div>
           <div className="make-probability-list">
-            {readBySlope.map((row, i) => (
-              <div key={i} className="make-probability-row">
-                <div className="make-probability-label">{row.label}</div>
-                <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
-                  {row.total > 0 ? (
-                    <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
-                      <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
-                      <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
-                      <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
-                    </div>
-                  ) : null}
+            {readBySlope.map((row, i) => {
+              const dominant = row.total > 0 ? dominantRead(row) : null;
+              return (
+                <div key={i} className="make-probability-row" style={{ gridTemplateColumns: '80px 1fr 80px', gap: '1.25rem' }}>
+                  <div className="make-probability-label" style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span>{row.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>n={row.total}</span>
+                  </div>
+                  <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
+                    {row.total > 0 ? (
+                      <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                        <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
+                        <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
+                        <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
+                    {dominant && <>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: readColors[dominant.key], flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1, textAlign: 'right' }}>{dominant.pct}%</div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text)', lineHeight: 1.2, textAlign: 'right' }}>{readLabels[dominant.key]}</div>
+                      </div>
+                    </>}
+                  </div>
                 </div>
-                <div className="make-probability-percentage">
-                  {row.total > 0 ? `${row.total}` : '—'}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1274,25 +1302,47 @@ export function StatsDisplay({ putts, unit }: StatsDisplayProps) {
           </div>
 
           <div className="make-probability-list">
-            {readByDistance.filter(row => row.total > 0).map((row, i) => (
-              <div key={i} className="make-probability-row">
-                <div className="make-probability-label">{row.label}</div>
-                <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
-                  <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
-                    <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
-                    <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
-                    <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+            {readByDistance.filter(row => row.total > 0).map((row, i) => {
+              const dominant = dominantRead(row);
+              return (
+                <div key={i} className="make-probability-row" style={{ gridTemplateColumns: '80px 1fr 80px', gap: '1.25rem' }}>
+                  <div className="make-probability-label" style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span>{row.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>n={row.total}</span>
+                  </div>
+                  <div className="make-probability-bar-container" style={{ position: 'relative', overflow: 'hidden', borderRadius: 4 }}>
+                    <div style={{ display: 'flex', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
+                      <div style={{ width: `${row.over}%`,  background: readColors.over,  transition: 'width 0.3s' }} />
+                      <div style={{ width: `${row.good}%`,  background: readColors.good,  transition: 'width 0.3s' }} />
+                      <div style={{ width: `${row.under}%`, background: readColors.under, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: readColors[dominant.key], flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>{dominant.pct}%</div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text)', lineHeight: 1.2 }}>{readLabels[dominant.key]}</div>
+                    </div>
                   </div>
                 </div>
-                <div className="make-probability-percentage">{row.total}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
     </div>
   );
+}
+
+// Helper to find the dominant read category for a row
+function dominantRead(row: { over: number; good: number; under: number }) {
+  const candidates = [
+    { key: 'over' as const,  pct: Math.round(row.over) },
+    { key: 'good' as const,  pct: Math.round(row.good) },
+    { key: 'under' as const, pct: Math.round(row.under) },
+  ];
+  return candidates.reduce((a, b) => a.pct >= b.pct ? a : b);
 }
 
 // Helper function to generate SVG path for line chart
